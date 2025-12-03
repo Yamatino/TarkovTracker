@@ -58,3 +58,31 @@ main { padding: 20px; }
     min-width: 40px;
     text-align: center;
 }
+/* Add to src/App.css */
+
+.status-complete {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+    padding: 10px;
+    border-radius: 4px;
+    margin: 10px 0;
+    font-weight: bold;
+    border: 1px solid #c8e6c9;
+}
+
+/* Adjust needed-alert to match look */
+.needed-alert {
+    background-color: #ffebee;
+    color: #c62828;
+    padding: 10px;
+    border-radius: 4px;
+    margin: 10px 0;
+    font-weight: bold;
+    border: 1px solid #ffcdd2;
+}
+
+.not-needed {
+    color: #757575;
+    font-style: italic;
+    margin: 10px 0;
+}
