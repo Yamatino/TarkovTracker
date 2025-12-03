@@ -1,0 +1,31 @@
+body { background-color: #f0f0f0; font-family: 'Segoe UI', sans-serif; margin: 0; }
+.app-container { max-width: 800px; margin: 0 auto; background: white; min-height: 100vh; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+header { background: #333; color: white; padding: 1rem; }
+header h1 { margin: 0 0 1rem 0; font-size: 1.2rem; }
+nav button { background: #444; border: none; color: #aaa; padding: 10px 20px; cursor: pointer; font-weight: bold; }
+nav button.active { background: white; color: black; }
+main { padding: 20px; }
+
+/* Items */
+.item-row { display: flex; border-bottom: 1px solid #eee; padding: 8px; cursor: pointer; user-select: none; }
+.item-row:hover { background-color: #f9f9f9; }
+.item-row.collected { background-color: #e8f5e9; color: #2e7d32; }
+.col-name { flex: 2; font-weight: bold; }
+.col-total { width: 50px; text-align: center; }
+.col-breakdown { flex: 2; font-size: 0.9em; color: #555; }
+.col-status { width: 100px; text-align: right; font-weight: bold; }
+
+/* Search & Results */
+.search-box { display: flex; gap: 10px; margin-bottom: 20px; }
+.search-box input { flex: 1; padding: 8px; }
+.result-card { border: 1px solid #ddd; padding: 15px; margin-bottom: 15px; border-radius: 4px; }
+.needed-alert { color: #d32f2f; font-weight: bold; margin: 10px 0; }
+.prices { display: flex; justify-content: space-between; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #ccc; }
+.profit { color: green; font-weight: bold; }
+.loss { color: #d32f2f; }
+
+/* Hideout Grid */
+.station-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.station-card { background: #eee; padding: 10px; display: flex; justify-content: space-between; align-items: center; border-radius: 4px; }
+.controls button { width: 30px; }
+.level-badge { margin: 0 10px; font-weight: bold; }
