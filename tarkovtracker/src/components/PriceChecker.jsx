@@ -1,17 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { runQuery } from '../api';
 
-const CACHE_KEY = 'tarkov_item_index_v2';
+// Bumped version to v3 to force re-download of index with 'types'
+const CACHE_KEY = 'tarkov_item_index_v3';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; 
 
 export default function PriceChecker({ itemProgress, hideoutLevels }) {
   const [term, setTerm] = useState("");
+  const [onlyGuns, setOnlyGuns] = useState(false); // NEW: Filter State
+
   const [index, setIndex] = useState([]); 
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("Initializing...");
 
-  // 1. Load Index
+  // 1. Load Index (Now includes 'types')
   useEffect(() => {
     const loadIndex = async () => {
       const cached = localStorage.getItem(CACHE_KEY);
@@ -23,8 +26,11 @@ export default function PriceChecker({ itemProgress, hideoutLevels }) {
           return; 
         }
       }
-      setStatus("Downloading Item Database...");
-      const data = await runQuery(`{ items { id name shortName } }`);
+      setStatus("Downloading Item Database (v3)...");
+      
+      // UPDATED: Fetches 'types' so we can filter locally
+      const data = await runQuery(`{ items { id name shortName types } }`);
+      
       if (data && data.items) {
         localStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data: data.items }));
         setIndex(data.items);
@@ -40,22 +46,31 @@ export default function PriceChecker({ itemProgress, hideoutLevels }) {
     if (!term.trim()) return;
     const q = term.toLowerCase().trim();
 
-    const matches = index.filter(i => 
+    // A. Basic String Match
+    let matches = index.filter(i => 
         (i.name && i.name.toLowerCase().includes(q)) || 
         (i.shortName && i.shortName.toLowerCase().includes(q))
     );
     
+    // B. Apply "Only Guns" Filter
+    if (onlyGuns) {
+        matches = matches.filter(i => i.types && i.types.includes('weapon') && !i.types.includes('modification'));
+    }
+
+    // C. Sort (Prioritize Weapons and Exact Matches)
     matches.sort((a, b) => {
         const aShort = a.shortName ? a.shortName.toLowerCase() : "";
         const bShort = b.shortName ? b.shortName.toLowerCase() : "";
         const aName = a.name.toLowerCase();
         const bName = b.name.toLowerCase();
 
+        // Exact Matches First
         if (aShort === q && bShort !== q) return -1;
         if (bShort === q && aShort !== q) return 1;
         if (aName === q && bName !== q) return -1;
         if (bName === q && aName !== q) return 1;
         
+        // Starts With
         const aStarts = aName.startsWith(q) || aShort.startsWith(q);
         const bStarts = bName.startsWith(q) || bShort.startsWith(q);
         if (aStarts && !bStarts) return -1;
@@ -68,7 +83,7 @@ export default function PriceChecker({ itemProgress, hideoutLevels }) {
     
     if (topMatches.length === 0) {
         setResults([]);
-        alert("No item found.");
+        // Don't alert if empty, just clear results to be less annoying
         return;
     }
 
@@ -80,6 +95,7 @@ export default function PriceChecker({ itemProgress, hideoutLevels }) {
     setLoading(true);
     setResults([]); 
     
+    // Detailed Query
     const query = `
     query getDetails($ids: [ID!]!) {
         items(ids: $ids) {
@@ -172,6 +188,27 @@ export default function PriceChecker({ itemProgress, hideoutLevels }) {
           placeholder="Search item (e.g. M4A1, Salewa)..." 
           disabled={index.length === 0}
         />
+        
+        {/* NEW FILTER CHECKBOX */}
+        <label style={{
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '8px', 
+            whiteSpace: 'nowrap',
+            cursor: 'pointer',
+            background: '#2c2c2c',
+            padding: '0 10px',
+            borderRadius: '4px',
+            border: '1px solid #333'
+        }}>
+            <input 
+                type="checkbox" 
+                checked={onlyGuns} 
+                onChange={e => setOnlyGuns(e.target.checked)} 
+            />
+            Only Guns
+        </label>
+
         <button type="submit" disabled={index.length === 0 || loading}>
             {loading ? "..." : "Search"}
         </button>
@@ -183,7 +220,6 @@ export default function PriceChecker({ itemProgress, hideoutLevels }) {
             const userHas = itemProgress[item.id] || 0;
             const isComplete = userHas >= item.totalNeeded && item.totalNeeded > 0;
             
-            // --- FIX: Logic to capture REAL Flea Price ---
             let bestTrader = { name: "None", price: 0 };
             let realFleaPrice = 0;
 
@@ -197,7 +233,6 @@ export default function PriceChecker({ itemProgress, hideoutLevels }) {
                 }
             });
 
-            // Use the Real Flea Price (Live Min) if available, otherwise fallback to average
             const finalFlea = realFleaPrice > 0 ? realFleaPrice : (item.avg24hPrice || 0);
             const profit = finalFlea - bestTrader.price;
 
