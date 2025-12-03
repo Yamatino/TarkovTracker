@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { runQuery } from '../api';
 
-// v10: Cleaned up (No Maps)
-const CACHE_KEY = 'tarkov_global_cache_v10';
+// Bump cache version to force fresh download
+const CACHE_KEY = 'tarkov_global_cache_v11';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; 
+const TARKOV_DATA_BASE = "https://raw.githubusercontent.com/TarkovTracker/tarkovdata/master";
 
 export function useGlobalData() {
     const [data, setData] = useState(null);
@@ -12,26 +13,25 @@ export function useGlobalData() {
 
     useEffect(() => {
         const load = async () => {
-            // 1. Check Cache
             try {
+                // 1. Check Cache
                 const cached = localStorage.getItem(CACHE_KEY);
                 if (cached) {
-                    const parsed = JSON.parse(cached);
-                    if (Date.now() - parsed.timestamp < CACHE_DURATION) {
-                        setData(parsed.data);
-                        setLoading(false);
-                        return;
+                    try {
+                        const parsed = JSON.parse(cached);
+                        if (Date.now() - parsed.timestamp < CACHE_DURATION) {
+                            setData(parsed.data);
+                            setLoading(false);
+                            return;
+                        }
+                    } catch(e) {
+                        console.warn("Cache corrupt, reloading.");
                     }
                 }
-            } catch (e) {
-                console.warn("Cache error, reloading...");
-            }
 
-            // 2. Download API Data ONLY
-            try {
-                setStatus("Fetching Tarkov Database...");
+                // 2. Fetch API Data (The Heavy Part)
+                setStatus("Fetching Tarkov.dev Database...");
                 
-                // Query Items, Quests, and Hideout
                 const apiQuery = `
                 {
                     items(limit: 4000) { 
@@ -49,18 +49,25 @@ export function useGlobalData() {
                 }`;
                 
                 const apiData = await runQuery(apiQuery);
+                if (!apiData || !apiData.items) throw new Error("API fetch failed");
 
-                setStatus("Processing Data...");
-
-                // --- PROCESS DATA ---
+                // 3. Process Data
+                setStatus("Processing Items...");
                 const itemMap = {};
-                
-                // Initialize Items
+                const keysList = [];
+
                 apiData.items.forEach(i => {
                     itemMap[i.id] = { ...i, questDetails: [], hideoutDetails: [] };
+                    
+                    // Build Keys List while looping
+                    if ((i.types?.includes('key') || i.name.toLowerCase().includes('key')) && !i.types?.includes('barter')) {
+                        keysList.push(i);
+                    }
                 });
+                
+                keysList.sort((a, b) => a.name.localeCompare(b.name));
 
-                // Link Quests to Items
+                // Link Quests
                 apiData.tasks.forEach(task => {
                     const taskItems = {};
                     task.objectives.forEach(obj => {
@@ -85,7 +92,7 @@ export function useGlobalData() {
                     });
                 });
 
-                // Link Hideout to Items
+                // Link Hideout
                 apiData.hideoutStations.forEach(station => {
                     station.levels.forEach(lvl => {
                         lvl.itemRequirements.forEach(req => {
@@ -98,13 +105,7 @@ export function useGlobalData() {
                     });
                 });
 
-                // Keys List
-                const keysList = apiData.items.filter(i => 
-                    (i.types?.includes('key') || i.name.toLowerCase().includes('key')) && 
-                    !i.types?.includes('barter')
-                ).sort((a, b) => a.name.localeCompare(b.name));
-
-                // Final Payload
+                // Final Object
                 const globalData = {
                     items: Object.values(itemMap),
                     itemMap: itemMap,
@@ -113,15 +114,19 @@ export function useGlobalData() {
                     keys: keysList
                 };
 
-                // Save
-                localStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data: globalData }));
+                // Try Saving (Catch quota error)
+                try {
+                    localStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data: globalData }));
+                } catch (e) {
+                    console.warn("LocalStorage quota exceeded. App will work but data won't persist reload.");
+                }
 
                 setData(globalData);
                 setLoading(false);
 
             } catch (e) {
-                console.error(e);
-                setStatus("Error loading data. Please refresh.");
+                console.error("Global Data Error:", e);
+                setStatus(`Error: ${e.message}. Check console.`);
             }
         };
 
