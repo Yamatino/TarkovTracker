@@ -4,14 +4,15 @@ import { runQuery } from '../api';
 const CACHE_KEY = 'tarkov_item_index_v4';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; 
 
-export default function PriceChecker({ itemProgress, hideoutLevels }) {
+// 1. Accept 'completedQuests' prop
+export default function PriceChecker({ itemProgress, hideoutLevels, completedQuests }) {
   const [term, setTerm] = useState("");
   const [index, setIndex] = useState([]); 
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("Initializing...");
 
-  // 1. Load Index
+  // Load Index (Same as before)
   useEffect(() => {
     const loadIndex = async () => {
       const cached = localStorage.getItem(CACHE_KEY);
@@ -24,9 +25,7 @@ export default function PriceChecker({ itemProgress, hideoutLevels }) {
         }
       }
       setStatus("Downloading Item Database...");
-      
       const data = await runQuery(`{ items { id name shortName } }`);
-      
       if (data && data.items) {
         localStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data: data.items }));
         setIndex(data.items);
@@ -36,7 +35,7 @@ export default function PriceChecker({ itemProgress, hideoutLevels }) {
     loadIndex();
   }, []);
 
-  // 2. Search Logic
+  // Search Logic (Same as before)
   const handleSearch = (e) => {
     e.preventDefault();
     if (!term.trim()) return;
@@ -81,6 +80,7 @@ export default function PriceChecker({ itemProgress, hideoutLevels }) {
     setLoading(true);
     setResults([]); 
     
+    // UPDATED QUERY: We need 'id' inside usedInTasks to check against completedQuests
     const query = `
     query getDetails($ids: [ID!]!) {
         items(ids: $ids) {
@@ -92,6 +92,7 @@ export default function PriceChecker({ itemProgress, hideoutLevels }) {
             sellFor { price currency vendor { name } }
             
             usedInTasks { 
+                id      # <--- Added ID here
                 name 
                 trader { name }
                 objectives {
@@ -121,26 +122,14 @@ export default function PriceChecker({ itemProgress, hideoutLevels }) {
         const enrichedItems = data.items.map(item => {
             const itemId = item.id;
             
-            // --- DETAILED QUEST LOGIC ---
             const questDetails = [];
             let totalQuestCount = 0;
 
             item.usedInTasks.forEach(task => {
-                let countForTask = 0;
-                task.objectives.forEach(obj => {
-                    if (obj.item && obj.item.id === itemId) {
-                        const count = obj.count || 1;
-                        if (obj.type === 'giveItem') countForTask += count;
-                        if (obj.type === 'findItem') countForTask += count;
-                        if (obj.type === 'plantItem') countForTask += count;
-                    }
-                });
+                // --- NEW FILTER LOGIC ---
+                // If this task ID is in our completed list, skip it entirely
+                if (completedQuests.includes(task.id)) return;
 
-                // Some quests have duplicate objectives (Find + Give), simplified logic:
-                // If sum is greater than 0, we record it. 
-                // Note: This sums Find + Give. Usually for "Shortage" (Find 3, Give 3) it might show 6.
-                // To be exact: Math.max(give, find) + plant is safer.
-                
                 let give = 0, find = 0, plant = 0;
                 task.objectives.forEach(obj => {
                     if (obj.item && obj.item.id === itemId) {
@@ -162,7 +151,7 @@ export default function PriceChecker({ itemProgress, hideoutLevels }) {
                 }
             });
 
-            // --- DETAILED HIDEOUT LOGIC ---
+            // Hideout Logic
             const hideoutDetails = [];
             let totalHideoutCount = 0;
 
@@ -189,8 +178,8 @@ export default function PriceChecker({ itemProgress, hideoutLevels }) {
             return {
                 ...item,
                 totalNeeded: totalQuestCount + totalHideoutCount,
-                questDetails,   // Array of {name, trader, count}
-                hideoutDetails  // Array of {station, level, count}
+                questDetails,
+                hideoutDetails
             };
         });
         
@@ -258,7 +247,6 @@ export default function PriceChecker({ itemProgress, hideoutLevels }) {
                         
                         {!isComplete && (
                             <div style={{marginTop: '10px', fontSize: '0.9em'}}>
-                                {/* QUESTS LIST */}
                                 {item.questDetails.length > 0 && (
                                     <div style={{marginBottom: '5px'}}>
                                         <div style={{fontWeight: 'bold', color: '#ffcc80'}}>Quests:</div>
@@ -272,7 +260,6 @@ export default function PriceChecker({ itemProgress, hideoutLevels }) {
                                     </div>
                                 )}
                                 
-                                {/* HIDEOUT LIST */}
                                 {item.hideoutDetails.length > 0 && (
                                     <div>
                                         <div style={{fontWeight: 'bold', color: '#90caf9'}}>Hideout:</div>
