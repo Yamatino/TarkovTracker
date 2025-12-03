@@ -19,7 +19,7 @@ function App() {
   return (
     <div className="app-container">
       <header>
-        <h1>Tarkov Companion Web</h1>
+        <h1>Tarkov Tracker by Yama</h1>
         <nav>
           <button className={activeTab === 'search' ? 'active' : ''} onClick={() => setActiveTab('search')}>Price Check</button>
           <button className={activeTab === 'tracker' ? 'active' : ''} onClick={() => setActiveTab('tracker')}>Tracker</button>

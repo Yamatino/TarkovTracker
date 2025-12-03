@@ -6,9 +6,9 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("");
   const [excludeCollector, setExcludeCollector] = useState(true);
+  const [showCompleted, setShowCompleted] = useState(false); // NEW STATE
 
   useEffect(() => {
-    // Query fetches name, icon, types, and counts
     const query = `
     {
       tasks {
@@ -32,13 +32,12 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
       if (!data) return;
       processData(data);
     });
-  }, [completedQuests]); // Re-run if completedQuests changes
+  }, [completedQuests]);
 
   const processData = (data) => {
     const questMap = {}; 
     const hideoutReqs = []; 
 
-    // Helper to determine badge type
     const getType = (item) => {
         if (!item.types) return "item";
         if (item.types.includes("ammo")) return "ammo";
@@ -50,9 +49,7 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
         return "item";
     };
 
-    // 1. Process Quests
     data.tasks.forEach(task => {
-      // --- NEW LOGIC: Skip tasks marked as completed in the Graph ---
       if (completedQuests.includes(task.id)) return;
 
       const isCollector = task.name === "Collector";
@@ -86,14 +83,12 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
           if (!questMap[id]) {
             questMap[id] = { count: 0, collectorOnly: true, name: t.name, icon: t.icon, type: t.type };
           }
-          
           if (!isCollector) questMap[id].collectorOnly = false;
           questMap[id].count += needed;
         }
       });
     });
 
-    // 2. Process Hideout
     data.hideoutStations.forEach(station => {
       station.levels.forEach(lvl => {
         lvl.itemRequirements.forEach(req => {
@@ -153,13 +148,23 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
     }
   });
 
-  // Filter Search
+  // Filter Search & Completion
   const allNeededItems = displayList
     .filter(x => (x.quest + x.hideout) > 0)
     .filter(x => x.name.toLowerCase().includes(filter.toLowerCase()))
+    .filter(x => {
+        // NEW FILTER LOGIC
+        const total = x.quest + x.hideout;
+        const has = itemProgress[x.id] || 0;
+        const isCompleted = has >= total;
+        
+        // If "Show Completed" is TRUE, show everything
+        // If "Show Completed" is FALSE, hide completed items
+        if (showCompleted) return true;
+        return !isCompleted;
+    })
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  // Split Lists
   const hideoutItems = allNeededItems.filter(i => i.hideout > 0);
   const questItems = allNeededItems.filter(i => i.quest > 0);
 
@@ -177,7 +182,6 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
             {item.icon && <img src={item.icon} alt="" className="item-icon" />}
         </div>
         <div className="col-name">
-           {/* BADGE */}
            <span className={`type-badge badge-${item.type}`}>
                 {item.type.toUpperCase()}
            </span>
@@ -214,14 +218,27 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
           onChange={e => setFilter(e.target.value)} 
           style={{width: '100%', maxWidth: '300px'}}
         />
-        <label style={{marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px'}}>
-          <input 
-            type="checkbox" 
-            checked={excludeCollector} 
-            onChange={e => setExcludeCollector(e.target.checked)} 
-          />
-          Hide Collector
-        </label>
+        
+        <div style={{marginLeft: 'auto', display: 'flex', gap: '15px'}}>
+            {/* NEW: Show Completed Checkbox */}
+            <label style={{display: 'flex', alignItems: 'center', gap: '8px', cursor:'pointer'}}>
+            <input 
+                type="checkbox" 
+                checked={showCompleted} 
+                onChange={e => setShowCompleted(e.target.checked)} 
+            />
+            Show Completed
+            </label>
+
+            <label style={{display: 'flex', alignItems: 'center', gap: '8px', cursor:'pointer'}}>
+            <input 
+                type="checkbox" 
+                checked={excludeCollector} 
+                onChange={e => setExcludeCollector(e.target.checked)} 
+            />
+            Hide Collector
+            </label>
+        </div>
       </div>
 
       {hideoutItems.length > 0 && (
@@ -243,8 +260,8 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
       )}
       
       {hideoutItems.length === 0 && questItems.length === 0 && (
-          <div style={{textAlign: 'center', padding: '20px', color: '#666'}}>
-              No items needed (or all filtered out).
+          <div style={{textAlign: 'center', padding: '40px', color: '#666'}}>
+              {showCompleted ? "No items found." : "No active items needed. Check 'Show Completed' to see finished items."}
           </div>
       )}
     </div>
