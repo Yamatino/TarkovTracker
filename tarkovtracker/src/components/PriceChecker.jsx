@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { runQuery } from '../api';
 
-// Bumped to v6 for fresh data
-const CACHE_KEY = 'tarkov_static_data_v6';
+const CACHE_KEY = 'tarkov_static_data_v8';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; 
 
 const SQUAD_ALERT_STYLE = {
@@ -15,22 +14,26 @@ const SQUAD_ALERT_STYLE = {
     fontSize: '0.9em'
 };
 
+const OWNED_STYLE = {
+    marginTop: '5px',
+    padding: '8px',
+    backgroundColor: 'rgba(76, 175, 80, 0.15)',
+    border: '1px solid #4caf50',
+    borderRadius: '4px',
+    color: '#a5d6a7',
+    fontSize: '0.9em'
+};
+
 const FIR_STYLE = { color: '#ffd700', fontWeight: 'bold', marginLeft: '5px' };
 
-export default function PriceChecker({ itemProgress, hideoutLevels, completedQuests, squadMembers, squadData }) {
+export default function PriceChecker({ itemProgress, hideoutLevels, completedQuests, squadMembers, squadData, ownedKeys }) {
   const [term, setTerm] = useState("");
-  
-  // Static Index holds all ITEM data (but not prices)
   const [staticIndex, setStaticIndex] = useState([]); 
-  
-  // Live Prices holds just the roubles (fetched on demand)
   const [livePrices, setLivePrices] = useState({}); 
-  
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("Initializing...");
 
-  // 1. LOAD & PROCESS STATIC DATA (Happens once on startup)
   useEffect(() => {
     const loadData = async () => {
       const cached = localStorage.getItem(CACHE_KEY);
@@ -42,49 +45,30 @@ export default function PriceChecker({ itemProgress, hideoutLevels, completedQue
           return; 
         }
       }
-
       setStatus("Downloading Database...");
-      
       const query = `
       {
         items { id name shortName iconLink types }
         tasks {
-          id
-          name
-          trader { name }
-          objectives {
-            type
-            ... on TaskObjectiveItem { count foundInRaid item { id } }
-          }
+          id name trader { name }
+          objectives { type ... on TaskObjectiveItem { count foundInRaid item { id } } }
         }
         hideoutStations {
-            name
-            levels {
-                level
-                itemRequirements { count item { id } }
-            }
+            name levels { level itemRequirements { count item { id } } }
         }
       }`;
-
-      const data = await runQuery(query);
       
+      const data = await runQuery(query);
       if (data) {
         const itemMap = {};
+        data.items.forEach(i => { itemMap[i.id] = { ...i, questDetails: [], hideoutDetails: [] }; });
 
-        // Initialize Items
-        data.items.forEach(i => {
-            itemMap[i.id] = { ...i, questDetails: [], hideoutDetails: [] };
-        });
-
-        // Process Quests (Aggregate objectives to avoid duplicates)
         data.tasks.forEach(task => {
-            const taskItems = {}; 
-
+            const taskItems = {};
             task.objectives.forEach(obj => {
                 if (obj.item && itemMap[obj.item.id]) {
                     const iid = obj.item.id;
                     if (!taskItems[iid]) taskItems[iid] = { give:0, find:0, plant:0, fir:false };
-                    
                     const c = obj.count || 1;
                     if (obj.type === 'giveItem') taskItems[iid].give += c;
                     if (obj.type === 'findItem') taskItems[iid].find += c;
@@ -92,263 +76,157 @@ export default function PriceChecker({ itemProgress, hideoutLevels, completedQue
                     if (obj.foundInRaid) taskItems[iid].fir = true;
                 }
             });
-
             Object.keys(taskItems).forEach(iid => {
                 const t = taskItems[iid];
-                const finalCount = Math.max(t.give, t.find) + t.plant;
-
-                if (finalCount > 0) {
+                const count = Math.max(t.give, t.find) + t.plant;
+                if (count > 0) {
                     itemMap[iid].questDetails.push({
-                        id: task.id,
-                        name: task.name,
-                        trader: task.trader?.name || "?",
-                        count: finalCount,
-                        fir: t.fir
+                        id: task.id, name: task.name, trader: task.trader?.name, count, fir: t.fir
                     });
                 }
             });
         });
 
-        // Process Hideout
         data.hideoutStations.forEach(station => {
             station.levels.forEach(lvl => {
                 lvl.itemRequirements.forEach(req => {
                     if (req.item && itemMap[req.item.id]) {
                         itemMap[req.item.id].hideoutDetails.push({
-                            station: station.name,
-                            level: lvl.level,
-                            count: req.count
+                            station: station.name, level: lvl.level, count: req.count
                         });
                     }
                 });
             });
         });
-
-        const processedList = Object.values(itemMap);
-        localStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data: processedList }));
-        setStaticIndex(processedList);
+        
+        const processed = Object.values(itemMap);
+        localStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data: processed }));
+        setStaticIndex(processed);
         setStatus("");
       }
     };
     loadData();
   }, []);
 
-  // 2. INSTANT SEARCH
   const handleSearch = (e) => {
     e.preventDefault();
     if (!term.trim()) return;
     const q = term.toLowerCase().trim();
-
-    let matches = staticIndex.filter(i => 
-        (i.name && i.name.toLowerCase().includes(q)) || 
-        (i.shortName && i.shortName.toLowerCase().includes(q))
-    );
-    
-    matches.sort((a, b) => {
-        const aShort = a.shortName ? a.shortName.toLowerCase() : "";
-        const bShort = b.shortName ? b.shortName.toLowerCase() : "";
-        if (aShort === q && bShort !== q) return -1;
-        if (bShort === q && aShort !== q) return 1;
-        return a.name.length - b.name.length;
-    });
-
-    const topMatches = matches.slice(0, 10);
-    setResults(topMatches);
-    
-    // Fetch live prices in background
-    if (topMatches.length > 0) {
-        fetchPrices(topMatches.map(m => m.id));
-    }
+    let matches = staticIndex.filter(i => (i.name && i.name.toLowerCase().includes(q)) || (i.shortName && i.shortName.toLowerCase().includes(q)));
+    matches.sort((a, b) => a.name.length - b.name.length);
+    const top = matches.slice(0, 10);
+    setResults(top);
+    if (top.length > 0) fetchPrices(top.map(m => m.id));
   };
 
-  // 3. FETCH PRICES
   const fetchPrices = async (ids) => {
     setLoading(true);
-    const query = `
-    query getPrices($ids: [ID!]!) {
-        items(ids: $ids) {
-            id
-            avg24hPrice
-            sellFor { price currency vendor { name } }
-        }
-    }`;
-
+    const query = `query getPrices($ids: [ID!]!) { items(ids: $ids) { id avg24hPrice sellFor { price currency vendor { name } } } }`;
     const data = await runQuery(query, { ids });
     if (data && data.items) {
-        const newPrices = {};
-        data.items.forEach(i => {
-            newPrices[i.id] = i;
-        });
-        setLivePrices(prev => ({ ...prev, ...newPrices }));
+        const newP = {};
+        data.items.forEach(i => newP[i.id] = i);
+        setLivePrices(p => ({ ...p, ...newP }));
     }
     setLoading(false);
   };
 
   return (
     <div className="tab-content">
-      <form onSubmit={handleSearch} className="search-box" style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
-        <input 
-          value={term} 
-          onChange={e => setTerm(e.target.value)} 
-          placeholder="Search item (e.g. M4A1, Salewa)..." 
-          disabled={staticIndex.length === 0}
-          style={{flex: 1}}
-        />
-        <button type="submit" disabled={staticIndex.length === 0} style={{height: '38px', minWidth: '80px'}}>
-            Search
-        </button>
+      <form onSubmit={handleSearch} className="search-box" style={{display: 'flex', gap: '10px'}}>
+        <input value={term} onChange={e => setTerm(e.target.value)} placeholder="Search item..." style={{flex: 1}} disabled={staticIndex.length===0}/>
+        <button type="submit" disabled={staticIndex.length===0}>Search</button>
       </form>
-
       {status && <div style={{color: '#666', fontSize: '0.9em'}}>{status}</div>}
-
       <div className="results-grid">
         {results.map((item, idx) => {
             const userHas = itemProgress[item.id] || 0;
-            
-            // Filter Completed Quests
             let questNeeded = 0;
             const activeQuests = item.questDetails.filter(q => !completedQuests.includes(q.id));
             activeQuests.forEach(q => questNeeded += q.count);
-
-            // Filter Built Hideout Stations
             let hideoutNeeded = 0;
-            const activeHideout = item.hideoutDetails.filter(h => {
-                const current = hideoutLevels[h.station] || 0;
-                return current < h.level;
-            });
+            const activeHideout = item.hideoutDetails.filter(h => (hideoutLevels[h.station]||0) < h.level);
             activeHideout.forEach(h => hideoutNeeded += h.count);
-
             const totalNeeded = questNeeded + hideoutNeeded;
             const isComplete = userHas >= totalNeeded && totalNeeded > 0;
 
-            // Price Data (Live)
             const priceData = livePrices[item.id];
-            let bestTrader = { name: "None", price: 0 };
-            let finalFlea = 0;
-
+            let bestTrader = { name: "None", price: 0 }, finalFlea = 0;
             if (priceData) {
                 priceData.sellFor.forEach(sale => {
-                    if (sale.vendor.name === "Flea Market") {
-                        finalFlea = sale.price;
-                    } else if (sale.currency === "RUB") {
-                        if (sale.price > bestTrader.price) {
-                            bestTrader = { name: sale.vendor.name, price: sale.price };
-                        }
-                    }
+                    if (sale.vendor.name === "Flea Market") finalFlea = sale.price;
+                    else if (sale.currency === "RUB" && sale.price > bestTrader.price) bestTrader = { name: sale.vendor.name, price: sale.price };
                 });
                 if (finalFlea === 0) finalFlea = priceData.avg24hPrice || 0;
             }
             const profit = finalFlea - bestTrader.price;
 
-            // Squad Logic
             const squadNeeds = [];
             if (squadMembers && squadMembers.length > 0) {
-                squadMembers.forEach(member => {
-                    const mData = squadData[member.uid] || {};
-                    const mHas = mData.progress?.[item.id] || 0;
-                    const mQuests = mData.quests || [];
-                    const mHideout = mData.hideout || {};
-                    
-                    let mNeed = 0;
-                    let mFir = false;
-
-                    item.questDetails.forEach(q => {
-                        if (!mQuests.includes(q.id)) {
-                           mNeed += q.count;
-                           if(q.fir) mFir = true;
-                        }
-                    });
-                    item.hideoutDetails.forEach(h => {
-                        if ((mHideout[h.station] || 0) < h.level) mNeed += h.count;
-                    });
-
-                    if (mNeed > mHas) {
-                        squadNeeds.push({ name: member.name, missing: mNeed - mHas, fir: mFir });
-                    }
+                squadMembers.forEach(m => {
+                    const d = squadData[m.uid] || {};
+                    const mHas = d.progress?.[item.id] || 0;
+                    const mQuests = d.quests || [];
+                    const mHideout = d.hideout || {};
+                    let mNeed = 0, mFir = false;
+                    item.questDetails.forEach(q => { if(!mQuests.includes(q.id)) { mNeed += q.count; if(q.fir) mFir = true; }});
+                    item.hideoutDetails.forEach(h => { if((mHideout[h.station]||0) < h.level) mNeed += h.count; });
+                    if (mNeed > mHas) squadNeeds.push({ name: m.name, missing: mNeed - mHas, fir: mFir });
                 });
             }
 
+            // Key Ownership Check
+            const isKey = item.types?.includes('key') || item.name.toLowerCase().includes('key');
+
             return (
-            <div key={idx} className="result-card">
+              <div key={idx} className="result-card">
                 <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
-                    {item.iconLink && <img src={item.iconLink} alt={item.name} style={{width: '64px', height: '64px'}} />}
-                    <div>
-                        <h3>{item.name}</h3>
-                        <div style={{fontSize: '0.8em', color: '#666'}}>{item.shortName}</div>
-                    </div>
+                    {item.iconLink && <img src={item.iconLink} alt="" style={{width: 64, height: 64}} />}
+                    <div><h3>{item.name}</h3><div style={{color:'#666', fontSize:'0.8em'}}>{item.shortName}</div></div>
                 </div>
 
+                {/* KEY STATUS */}
+                {isKey && (
+                    <div style={{marginTop: '10px', marginBottom: '10px'}}>
+                        {ownedKeys[item.id] ? (
+                            <div style={OWNED_STYLE}><b>✓ You own this key.</b></div>
+                        ) : (
+                            <div style={{...OWNED_STYLE, borderColor: '#555', color: '#888', backgroundColor: 'transparent'}}>
+                                You do NOT own this key.
+                            </div>
+                        )}
+                        {squadMembers.length > 0 && (
+                            <div style={{marginTop: '5px', fontSize: '0.9em', color: '#ccc'}}>
+                                Squad Owners: 
+                                {squadMembers.map(m => {
+                                    const keys = squadData[m.uid]?.keys || {};
+                                    return keys[item.id] ? <span key={m.uid} style={{marginLeft:'8px', background:'#1b5e20', padding:'2px 6px', borderRadius:'4px'}}>{m.name}</span> : null;
+                                })}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* NEEDS */}
                 {totalNeeded > 0 ? (
                     <div className={isComplete ? "status-complete" : "needed-alert"}>
-                        {isComplete ? (
-                            <span>✅ COMPLETED ({userHas}/{totalNeeded})</span>
-                        ) : (
-                            <span>[!] NEEDED: {totalNeeded} (Have {userHas})</span>
-                        )}
-                        {!isComplete && (
-                            <div style={{marginTop: '10px', fontSize: '0.9em'}}>
-                                {activeQuests.length > 0 && (
-                                    <div style={{marginBottom: '5px'}}>
-                                        <div style={{fontWeight: 'bold', color: '#ffcc80'}}>Quests:</div>
-                                        <ul style={{margin: '2px 0 0 20px', padding: 0, color: '#e0e0e0'}}>
-                                            {activeQuests.map((q, i) => (
-                                                <li key={i}>
-                                                    {q.name} ({q.trader}): <span style={{fontWeight:'bold'}}>{q.count}</span>
-                                                    {q.fir && <span style={FIR_STYLE}>(FIR)</span>}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                )}
-                                {activeHideout.length > 0 && (
-                                    <div>
-                                        <div style={{fontWeight: 'bold', color: '#90caf9'}}>Hideout:</div>
-                                        <ul style={{margin: '2px 0 0 20px', padding: 0, color: '#e0e0e0'}}>
-                                            {activeHideout.map((h, i) => (
-                                                <li key={i}>
-                                                    {h.station} (Lvl {h.level}): <span style={{fontWeight:'bold'}}>{h.count}</span>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                        {isComplete ? <span>✅ COMPLETED ({userHas}/{totalNeeded})</span> : <span>[!] NEEDED: {totalNeeded} (Have {userHas})</span>}
+                        {!isComplete && <div style={{marginTop: 10, fontSize:'0.9em'}}>
+                             {activeQuests.length > 0 && <ul style={{margin:'5px 0 5px 20px', color:'#ddd'}}>{activeQuests.map((q,i)=><li key={i}>{q.name} ({q.trader}): <b>{q.count}</b>{q.fir && <span style={FIR_STYLE}>(FIR)</span>}</li>)}</ul>}
+                             {activeHideout.length > 0 && <ul style={{margin:'5px 0 5px 20px', color:'#ddd'}}>{activeHideout.map((h,i)=><li key={i}>{h.station} (Lvl {h.level}): <b>{h.count}</b></li>)}</ul>}
+                        </div>}
                     </div>
-                ) : (
-                    <div className="not-needed">No active tasks.</div>
-                )}
+                ) : <div className="not-needed">No active tasks.</div>}
 
-                {squadNeeds.length > 0 && (
-                    <div style={SQUAD_ALERT_STYLE}>
-                        <div style={{fontWeight:'bold', marginBottom:'5px'}}>Needed by Squad:</div>
-                        {squadNeeds.map((s, i) => (
-                            <div key={i}>
-                                • {s.name} needs <b>{s.missing}</b>
-                                {s.fir && <span style={FIR_STYLE}>(FIR)</span>}
-                            </div>
-                        ))}
-                    </div>
-                )}
+                {squadNeeds.length > 0 && <div style={SQUAD_ALERT_STYLE}><b>Needed by Squad:</b>{squadNeeds.map((s, i) => <div key={i}>• {s.name} needs <b>{s.missing}</b>{s.fir && <span style={FIR_STYLE}>(FIR)</span>}</div>)}</div>}
                 
                 <div className="prices">
-                    {priceData ? (
-                        <>
-                            <div className="trader-price">Trader: {bestTrader.name} <br/> <b>{bestTrader.price.toLocaleString()} ₽</b></div>
-                            {finalFlea > 0 ? (
-                                <div className="flea-price">
-                                    Flea: ~{finalFlea.toLocaleString()} ₽
-                                    <div className={profit > 0 ? "profit" : "loss"}>
-                                        {profit > 0 ? `PROFIT: +${profit.toLocaleString()}` : "SELL TRADER"}
-                                    </div>
-                                </div>
-                            ) : <div>Flea: N/A</div>}
-                        </>
-                    ) : (
-                        <div style={{color: '#888', fontStyle:'italic'}}>Loading prices...</div>
-                    )}
+                    {priceData ? <>
+                        <div className="trader-price">Trader: {bestTrader.name}<br/><b>{bestTrader.price.toLocaleString()} ₽</b></div>
+                        {finalFlea > 0 ? <div className="flea-price">Flea: ~{finalFlea.toLocaleString()} ₽<div className={profit>0?"profit":"loss"}>{profit>0?`PROFIT: +${profit.toLocaleString()}`:"SELL TRADER"}</div></div> : <div>Flea: N/A</div>}
+                    </> : <div style={{color:'#888'}}>Loading prices...</div>}
                 </div>
-            </div>
+              </div>
             );
         })}
       </div>

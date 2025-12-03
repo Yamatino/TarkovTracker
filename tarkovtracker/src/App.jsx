@@ -9,7 +9,8 @@ import TrackerTab from './components/TrackerTab';
 import HideoutTab from './components/HideoutTab';
 import QuestsTab from './components/QuestsTab';
 import SquadTab from './components/SquadTab';
-import MapsTab from './components/MapsTab'; // <--- IMPORT THIS
+import MapsTab from './components/MapsTab';
+import KeyringTab from './components/KeyringTab'; // Import the new tab
 import './App.css';
 
 function App() {
@@ -21,9 +22,11 @@ function App() {
     return () => unsub();
   }, []);
 
+  // --- STATE MANAGEMENT ---
   const [itemProgress, setItemProgress] = useFirebaseSync(user, 'tarkov_progress_v2', {});
   const [hideoutLevels, setHideoutLevels] = useFirebaseSync(user, 'tarkov_hideout_levels', {});
   const [completedQuests, setCompletedQuests] = useFirebaseSync(user, 'tarkov_completed_quests', []);
+  const [ownedKeys, setOwnedKeys] = useFirebaseSync(user, 'tarkov_owned_keys', {}); // NEW
 
   const { squadCode, joinSquad, squadMembers, squadData } = useSquadData(user);
 
@@ -40,10 +43,9 @@ function App() {
           <button className={activeTab === 'tracker' ? 'active' : ''} onClick={() => setActiveTab('tracker')}>Tracker</button>
           <button className={activeTab === 'hideout' ? 'active' : ''} onClick={() => setActiveTab('hideout')}>Hideout</button>
           <button className={activeTab === 'quests' ? 'active' : ''} onClick={() => setActiveTab('quests')}>Quests</button>
-          
-          {/* NEW MAPS BUTTON */}
           <button className={activeTab === 'maps' ? 'active' : ''} onClick={() => setActiveTab('maps')}>Maps</button>
-
+          <button className={activeTab === 'keys' ? 'active' : ''} onClick={() => setActiveTab('keys')}>Keyring</button>
+          
           <button className={activeTab === 'squad' ? 'active' : ''} onClick={() => setActiveTab('squad')}>
              {squadCode ? `Squad: ${squadCode}` : "Squad (Login)"}
           </button>
@@ -58,6 +60,7 @@ function App() {
             completedQuests={completedQuests}
             squadMembers={squadMembers}
             squadData={squadData}
+            ownedKeys={ownedKeys} // Pass this
           />
         )}
         {activeTab === 'tracker' && (
@@ -72,6 +75,12 @@ function App() {
         {activeTab === 'quests' && (
           <QuestsTab completedQuests={completedQuests} setCompletedQuests={setCompletedQuests} />
         )}
+        {activeTab === 'maps' && (
+          <MapsTab completedQuests={completedQuests} />
+        )}
+        {activeTab === 'keys' && (
+          <KeyringTab ownedKeys={ownedKeys} setOwnedKeys={setOwnedKeys} />
+        )}
         {activeTab === 'squad' && (
           <SquadTab 
             user={user} 
@@ -80,11 +89,6 @@ function App() {
             squadMembers={squadMembers}
             squadData={squadData}
           />
-        )}
-        
-        {/* NEW TAB RENDER */}
-        {activeTab === 'maps' && (
-          <MapsTab completedQuests={completedQuests} />
         )}
       </main>
     </div>
