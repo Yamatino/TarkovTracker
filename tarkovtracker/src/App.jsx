@@ -17,7 +17,6 @@ function App() {
   const [activeTab, setActiveTab] = useState('search');
   const [user, setUser] = useState(null);
 
-  // Global Data Loader
   const { data: globalData, loading, status } = useGlobalData();
 
   useEffect(() => {
@@ -43,12 +42,19 @@ function App() {
       );
   }
 
+  // Helper for button text
+  const getSquadLabel = () => {
+      if (!squadCode) return "Squad (Login)";
+      if (squadCode === "general-lobby") return "Squad (Lobby)";
+      return "Squad"; // Keep it short so it doesn't wrap
+  };
+
   return (
     <div className="app-container">
       <header>
         <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
             <img src="/image.ico" alt="Logo" style={{width: '40px', height: '40px'}} />
-            <h1>Tarkov Tracker by Yama</h1>
+            <h1 className="app-title">Tarkov Tracker</h1>
         </div>
 
         <nav>
@@ -58,7 +64,7 @@ function App() {
           <button className={activeTab === 'quests' ? 'active' : ''} onClick={() => setActiveTab('quests')}>Quests</button>
           <button className={activeTab === 'keys' ? 'active' : ''} onClick={() => setActiveTab('keys')}>Keyring</button>
           <button className={activeTab === 'squad' ? 'active' : ''} onClick={() => setActiveTab('squad')}>
-             {squadCode ? `Squad: ${squadCode}` : "Squad (Login)"}
+             {getSquadLabel()}
           </button>
         </nav>
       </header>
@@ -98,8 +104,7 @@ function App() {
           <KeyringTab 
             globalData={globalData} 
             ownedKeys={ownedKeys} setOwnedKeys={setOwnedKeys} 
-            squadMembers={squadMembers}
-            squadData={squadData}
+            squadMembers={squadMembers} squadData={squadData}
            />
         )}
         {activeTab === 'squad' && (
