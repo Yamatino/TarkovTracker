@@ -1,14 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { runQuery } from '../api';
 
-// Bump to v4 to ensure everyone gets the latest data structure
 const CACHE_KEY = 'tarkov_item_index_v4';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; 
 
 export default function PriceChecker({ itemProgress, hideoutLevels }) {
   const [term, setTerm] = useState("");
-  const [onlyGuns, setOnlyGuns] = useState(false);
-
   const [index, setIndex] = useState([]); 
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -26,9 +23,9 @@ export default function PriceChecker({ itemProgress, hideoutLevels }) {
           return; 
         }
       }
-      setStatus("Downloading Item Database (v4)...");
+      setStatus("Downloading Item Database...");
       
-      const data = await runQuery(`{ items { id name shortName types } }`);
+      const data = await runQuery(`{ items { id name shortName } }`);
       
       if (data && data.items) {
         localStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data: data.items }));
@@ -45,24 +42,13 @@ export default function PriceChecker({ itemProgress, hideoutLevels }) {
     if (!term.trim()) return;
     const q = term.toLowerCase().trim();
 
-    // A. Basic String Match
+    // Basic String Match
     let matches = index.filter(i => 
         (i.name && i.name.toLowerCase().includes(q)) || 
         (i.shortName && i.shortName.toLowerCase().includes(q))
     );
     
-    // B. Apply "Only Guns" Filter (Strict Mode)
-    if (onlyGuns) {
-        matches = matches.filter(i => {
-            if (!i.types) return false;
-            // Must be a weapon, but NOT a mod, component, or ammo
-            const isWeapon = i.types.includes('weapon');
-            const isMod = i.types.includes('modification') || i.types.includes('component') || i.types.includes('preset');
-            return isWeapon && !isMod;
-        });
-    }
-
-    // C. Sort
+    // Sort (Prioritize Exact Matches & Shortest Names)
     matches.sort((a, b) => {
         const aShort = a.shortName ? a.shortName.toLowerCase() : "";
         const bShort = b.shortName ? b.shortName.toLowerCase() : "";
@@ -182,10 +168,7 @@ export default function PriceChecker({ itemProgress, hideoutLevels }) {
 
   return (
     <div className="tab-content">
-      {/* UPDATED LAYOUT */}
       <form onSubmit={handleSearch} className="search-box" style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
-        
-        {/* 1. INPUT */}
         <input 
           value={term} 
           onChange={e => setTerm(e.target.value)} 
@@ -193,30 +176,7 @@ export default function PriceChecker({ itemProgress, hideoutLevels }) {
           disabled={index.length === 0}
           style={{flex: 1}}
         />
-        
-        {/* 2. CHECKBOX (Next to Input) */}
-        <label style={{
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '8px', 
-            whiteSpace: 'nowrap',
-            cursor: 'pointer',
-            background: '#2c2c2c',
-            padding: '8px 12px',
-            borderRadius: '4px',
-            border: '1px solid #333',
-            height: '20px' 
-        }}>
-            <input 
-                type="checkbox" 
-                checked={onlyGuns} 
-                onChange={e => setOnlyGuns(e.target.checked)} 
-            />
-            <span style={{fontSize: '0.9rem'}}>Only Guns</span>
-        </label>
-
-        {/* 3. BUTTON */}
-        <button type="submit" disabled={index.length === 0 || loading} style={{height: '38px'}}>
+        <button type="submit" disabled={index.length === 0 || loading} style={{height: '38px', minWidth: '80px'}}>
             {loading ? "..." : "Search"}
         </button>
       </form>
