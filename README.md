@@ -4,6 +4,8 @@ A modern, cloud-synchronized companion web application for **Escape from Tarkov*
 
 This application helps players track items needed for Quests and Hideout upgrades, check live prices, visualize quest progression chains, and **sync progress in real-time with a squad**.
 
+URL PROD: https://tarkovtracker.pages.dev/
+
 ## 🚀 Features
 
 ### 1. Multiplayer Squad Sync (Real-time)
