@@ -1,35 +1,32 @@
 import React, { useState, useEffect } from 'react';
-// IMPORT FIREBASE AUTH
 import { auth } from './firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
-
-// IMPORT NEW HOOK
 import { useFirebaseSync } from './hooks/useFirebaseSync';
+import { useSquadData } from './hooks/useSquadData'; // Import new hook
 
 import PriceChecker from './components/PriceChecker';
 import TrackerTab from './components/TrackerTab';
 import HideoutTab from './components/HideoutTab';
 import QuestsTab from './components/QuestsTab';
-import SquadTab from './components/SquadTab'; // Import new Tab
+import SquadTab from './components/SquadTab';
 import './App.css';
 
 function App() {
   const [activeTab, setActiveTab] = useState('search');
-  
-  // 1. User Auth State
   const [user, setUser] = useState(null);
+
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (currentUser) => {
-        setUser(currentUser);
-    });
+    const unsub = onAuthStateChanged(auth, setUser);
     return () => unsub();
   }, []);
 
-  // 2. REPLACE useLocalStorage WITH useFirebaseSync
-  // We pass 'user' so it knows when to switch to Cloud mode
+  // My Data
   const [itemProgress, setItemProgress] = useFirebaseSync(user, 'tarkov_progress_v2', {});
   const [hideoutLevels, setHideoutLevels] = useFirebaseSync(user, 'tarkov_hideout_levels', {});
   const [completedQuests, setCompletedQuests] = useFirebaseSync(user, 'tarkov_completed_quests', []);
+
+  // Squad Data (Hook)
+  const { squadCode, joinSquad, squadMembers, squadData } = useSquadData(user);
 
   return (
     <div className="app-container">
@@ -41,14 +38,21 @@ function App() {
           <button className={activeTab === 'hideout' ? 'active' : ''} onClick={() => setActiveTab('hideout')}>Hideout</button>
           <button className={activeTab === 'quests' ? 'active' : ''} onClick={() => setActiveTab('quests')}>Quests</button>
           <button className={activeTab === 'squad' ? 'active' : ''} onClick={() => setActiveTab('squad')}>
-             {user ? "Squad (Online)" : "Squad (Login)"}
+             {squadCode ? `Squad: ${squadCode}` : "Squad (Login)"}
           </button>
         </nav>
       </header>
       
       <main>
         {activeTab === 'search' && (
-          <PriceChecker itemProgress={itemProgress} hideoutLevels={hideoutLevels} completedQuests={completedQuests} />
+          <PriceChecker 
+            itemProgress={itemProgress} 
+            hideoutLevels={hideoutLevels} 
+            completedQuests={completedQuests}
+            // Pass Squad Data Down
+            squadMembers={squadMembers}
+            squadData={squadData}
+          />
         )}
         {activeTab === 'tracker' && (
           <TrackerTab 
@@ -62,12 +66,13 @@ function App() {
         {activeTab === 'quests' && (
           <QuestsTab completedQuests={completedQuests} setCompletedQuests={setCompletedQuests} />
         )}
-        {/* NEW SQUAD TAB */}
         {activeTab === 'squad' && (
           <SquadTab 
             user={user} 
-            hideoutLevels={hideoutLevels} 
-            itemProgress={itemProgress} 
+            squadCode={squadCode}
+            joinSquad={joinSquad}
+            squadMembers={squadMembers}
+            squadData={squadData}
           />
         )}
       </main>
