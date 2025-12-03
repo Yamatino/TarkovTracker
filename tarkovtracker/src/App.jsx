@@ -3,33 +3,45 @@ import { auth } from './firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useFirebaseSync } from './hooks/useFirebaseSync';
 import { useSquadData } from './hooks/useSquadData';
+import { useGlobalData } from './hooks/useGlobalData';
 
 import PriceChecker from './components/PriceChecker';
 import TrackerTab from './components/TrackerTab';
 import HideoutTab from './components/HideoutTab';
 import QuestsTab from './components/QuestsTab';
 import SquadTab from './components/SquadTab';
-import KeyringTab from './components/KeyringTab'; // Keyring is kept
-// REMOVED: import MapsTab ...
-
+import KeyringTab from './components/KeyringTab';
 import './App.css';
 
 function App() {
   const [activeTab, setActiveTab] = useState('search');
   const [user, setUser] = useState(null);
 
+  // Global Data Loader
+  const { data: globalData, loading, status } = useGlobalData();
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, setUser);
     return () => unsub();
   }, []);
 
-  // --- STATE MANAGEMENT ---
   const [itemProgress, setItemProgress] = useFirebaseSync(user, 'tarkov_progress_v2', {});
   const [hideoutLevels, setHideoutLevels] = useFirebaseSync(user, 'tarkov_hideout_levels', {});
   const [completedQuests, setCompletedQuests] = useFirebaseSync(user, 'tarkov_completed_quests', []);
   const [ownedKeys, setOwnedKeys] = useFirebaseSync(user, 'tarkov_owned_keys', {}); 
 
   const { squadCode, joinSquad, squadMembers, squadData } = useSquadData(user);
+
+  if (loading) {
+      return (
+          <div className="app-container" style={{display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', flexDirection:'column'}}>
+              <img src="/image.ico" alt="Loading" style={{width:'80px', marginBottom:'20px', animation:'spin 2s linear infinite'}} />
+              <h2>Tarkov Tracker by Yama</h2>
+              <p style={{color:'#888'}}>{status}</p>
+              <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+          </div>
+      );
+  }
 
   return (
     <div className="app-container">
@@ -44,9 +56,7 @@ function App() {
           <button className={activeTab === 'tracker' ? 'active' : ''} onClick={() => setActiveTab('tracker')}>Tracker</button>
           <button className={activeTab === 'hideout' ? 'active' : ''} onClick={() => setActiveTab('hideout')}>Hideout</button>
           <button className={activeTab === 'quests' ? 'active' : ''} onClick={() => setActiveTab('quests')}>Quests</button>
-          {/* REMOVED MAPS BUTTON */}
           <button className={activeTab === 'keys' ? 'active' : ''} onClick={() => setActiveTab('keys')}>Keyring</button>
-          
           <button className={activeTab === 'squad' ? 'active' : ''} onClick={() => setActiveTab('squad')}>
              {squadCode ? `Squad: ${squadCode}` : "Squad (Login)"}
           </button>
@@ -56,6 +66,7 @@ function App() {
       <main>
         {activeTab === 'search' && (
           <PriceChecker 
+            globalData={globalData} 
             itemProgress={itemProgress} 
             hideoutLevels={hideoutLevels} 
             completedQuests={completedQuests}
@@ -66,19 +77,28 @@ function App() {
         )}
         {activeTab === 'tracker' && (
           <TrackerTab 
+            globalData={globalData} 
             itemProgress={itemProgress} setItemProgress={setItemProgress}
             hideoutLevels={hideoutLevels} completedQuests={completedQuests}
           />
         )}
         {activeTab === 'hideout' && (
-          <HideoutTab levels={hideoutLevels} setLevels={setHideoutLevels} />
+          <HideoutTab 
+            globalData={globalData} 
+            levels={hideoutLevels} setLevels={setHideoutLevels} 
+           />
         )}
         {activeTab === 'quests' && (
-          <QuestsTab completedQuests={completedQuests} setCompletedQuests={setCompletedQuests} />
+          <QuestsTab 
+            globalData={globalData} 
+            completedQuests={completedQuests} setCompletedQuests={setCompletedQuests} 
+           />
         )}
-        {/* REMOVED MAPS TAB RENDER */}
         {activeTab === 'keys' && (
-          <KeyringTab ownedKeys={ownedKeys} setOwnedKeys={setOwnedKeys} />
+          <KeyringTab 
+            globalData={globalData} 
+            ownedKeys={ownedKeys} setOwnedKeys={setOwnedKeys} 
+           />
         )}
         {activeTab === 'squad' && (
           <SquadTab 
