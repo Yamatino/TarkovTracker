@@ -3,6 +3,20 @@ import { runQuery } from '../api';
 
 const TARKOV_DATA_BASE = "https://raw.githubusercontent.com/TarkovTracker/tarkovdata/master";
 
+// MAPPING: API ID -> Image Filename Part
+const MAP_IMAGE_OVERRIDES = {
+    "customs": "customs",
+    "factory4_day": "factory", // Fixes the broken factory image
+    "interchange": "interchange",
+    "woods": "woods",
+    "lighthouse": "lighthouse",
+    "shoreline": "shoreline",
+    "reserve": "reserve",
+    "streets": "streets",
+    "groundzero": "groundzero",
+    "laboratory": "laboratory"
+};
+
 export default function MapsTab({ completedQuests }) {
   const [maps, setMaps] = useState([]);
   const [selectedMapId, setSelectedMapId] = useState("customs");
@@ -54,10 +68,8 @@ export default function MapsTab({ completedQuests }) {
             }
         });
 
-        // Filter out maps that don't have images on tarkov.dev usually
-        const validMaps = apiData.maps.filter(m => 
-            ["customs","factory4_day","interchange","lighthouse","reserve","shoreline","streets","woods","groundzero","laboratory"].includes(m.id)
-        );
+        // Filter to only show maps we have images for
+        const validMaps = apiData.maps.filter(m => MAP_IMAGE_OVERRIDES[m.id]);
 
         setMaps(validMaps);
         setQuestLocations(locations);
@@ -77,7 +89,7 @@ export default function MapsTab({ completedQuests }) {
   useEffect(() => {
     if (!maps.length) return;
 
-    // Handle map ID aliases
+    // Handle map ID aliases for data lookup
     let lookupId = selectedMapId;
     if (selectedMapId === 'factory4_day') lookupId = 'factory';
 
@@ -98,8 +110,9 @@ export default function MapsTab({ completedQuests }) {
     setVisibleQuests(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // Use Official Tarkov.dev Images
-  const mapImageUrl = `https://assets.tarkov.dev/maps/${selectedMapId}-2d.png`;
+  // --- ROBUST IMAGE URL ---
+  const imageName = MAP_IMAGE_OVERRIDES[selectedMapId] || selectedMapId;
+  const mapImageUrl = `https://assets.tarkov.dev/maps/${imageName}-2d.png`;
 
   return (
     <div className="tab-content" style={{display: 'flex', height: '80vh', gap: '20px'}}>
@@ -149,6 +162,11 @@ export default function MapsTab({ completedQuests }) {
                         src={mapImageUrl} 
                         alt="Map" 
                         style={{display: 'block'}} 
+                        onError={(e) => {
+                             e.target.style.display='none'; 
+                             // Fallback message if even the official image fails
+                             e.target.parentNode.innerHTML += '<div style="padding:20px;color:#aaa">Map image load failed.</div>';
+                        }}
                     />
 
                     {(questLocations[selectedMapId === 'factory4_day' ? 'factory' : selectedMapId] || []).map((m, i) => {
