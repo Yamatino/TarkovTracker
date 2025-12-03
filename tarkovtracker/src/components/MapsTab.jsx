@@ -3,24 +3,11 @@ import { runQuery } from '../api';
 
 const TARKOV_DATA_BASE = "https://raw.githubusercontent.com/TarkovTracker/tarkovdata/master";
 
-// MAPPING: API ID -> Image Filename Part
-const MAP_IMAGE_OVERRIDES = {
-    "customs": "customs",
-    "factory4_day": "factory", // Fixes the broken factory image
-    "interchange": "interchange",
-    "woods": "woods",
-    "lighthouse": "lighthouse",
-    "shoreline": "shoreline",
-    "reserve": "reserve",
-    "streets": "streets",
-    "groundzero": "groundzero",
-    "laboratory": "laboratory"
-};
-
 export default function MapsTab({ completedQuests }) {
   const [maps, setMaps] = useState([]);
   const [selectedMapId, setSelectedMapId] = useState("customs");
   const [questLocations, setQuestLocations] = useState({}); 
+  const [mapConfig, setMapConfig] = useState({}); // Store map metadata (filenames)
   const [activeQuests, setActiveQuests] = useState([]); 
   const [visibleQuests, setVisibleQuests] = useState({}); 
   const [loading, setLoading] = useState(true);
@@ -29,9 +16,9 @@ export default function MapsTab({ completedQuests }) {
   useEffect(() => {
     const init = async () => {
       try {
-        setStatus("Fetching Map & Quest Data...");
+        setStatus("Fetching Community Data...");
         
-        // 1. Fetch API Data
+        // 1. Fetch API Data (For IDs)
         const apiQuery = `
         {
           maps { id name }
@@ -39,19 +26,58 @@ export default function MapsTab({ completedQuests }) {
         }`;
         const apiData = await runQuery(apiQuery);
         
-        // 2. Fetch Community Quest Coordinates
-        const questsResp = await fetch(`${TARKOV_DATA_BASE}/quests.json`);
+        // 2. Fetch Community Data (Maps & Quests)
+        const [mapsResp, questsResp] = await Promise.all([
+            fetch(`${TARKOV_DATA_BASE}/maps.json`),
+            fetch(`${TARKOV_DATA_BASE}/quests.json`)
+        ]);
+
+        const comMaps = await mapsResp.json();
         const comQuests = await questsResp.json();
 
-        // 3. Process Quest Markers
+        // 3. Build Map Config (Link API ID -> Community Filename)
+        const config = {};
+        const validMapIds = [];
+
+        // Helper to normalize keys (API: factory4_day -> Community: factory)
+        const normalize = (id) => {
+            if (id === 'factory4_day') return 'factory';
+            return id.toLowerCase();
+        };
+
+        apiData.maps.forEach(apiMap => {
+            const key = normalize(apiMap.id);
+            // Look for matching key in community maps (case-insensitive search)
+            const comKey = Object.keys(comMaps).find(k => k.toLowerCase() === key);
+            
+            if (comKey && comMaps[comKey]) {
+                // FOUND IT! Save the exact filename
+                // Some maps use 'svg', some might not. We check safely.
+                const file = comMaps[comKey].svg ? comMaps[comKey].svg.file : null;
+                
+                if (file) {
+                    config[apiMap.id] = {
+                        name: apiMap.name,
+                        // Construct the full URL using the filename from JSON
+                        imageUrl: `${TARKOV_DATA_BASE}/maps/${file}`
+                    };
+                    validMapIds.push(apiMap);
+                }
+            }
+        });
+
+        // 4. Process Markers
         const locations = {};
         comQuests.forEach(cTask => {
             if (cTask.objectives) {
                 cTask.objectives.forEach(obj => {
                     if (obj.maps) {
                         obj.maps.forEach(loc => {
-                            let mapId = loc.id.toLowerCase();
-                            if (mapId === 'factory') mapId = 'factory4_day'; 
+                            let mapId = normalize(loc.id); // "WOODS" -> "woods"
+                            
+                            // We need to map "woods" back to the API ID if they differ
+                            // But usually for locations, we store them by normalized key
+                            // and look them up using the normalized selectedMapId
                             
                             if (!locations[mapId]) locations[mapId] = [];
                             
@@ -68,17 +94,15 @@ export default function MapsTab({ completedQuests }) {
             }
         });
 
-        // Filter to only show maps we have images for
-        const validMaps = apiData.maps.filter(m => MAP_IMAGE_OVERRIDES[m.id]);
-
-        setMaps(validMaps);
+        setMaps(validMapIds);
+        setMapConfig(config);
         setQuestLocations(locations);
         setStatus("");
         setLoading(false);
 
       } catch (e) {
         console.error(e);
-        setStatus("Error loading maps.");
+        setStatus("Error loading map data.");
       }
     };
 
@@ -89,13 +113,12 @@ export default function MapsTab({ completedQuests }) {
   useEffect(() => {
     if (!maps.length) return;
 
-    // Handle map ID aliases for data lookup
+    // Normalize selection for lookup
     let lookupId = selectedMapId;
     if (selectedMapId === 'factory4_day') lookupId = 'factory';
 
     const markers = questLocations[lookupId] || [];
     const relevant = markers.filter(m => !completedQuests.includes(m.questId));
-    
     const unique = [...new Map(relevant.map(m => [m.questId, m])).values()];
     
     setActiveQuests(unique);
@@ -109,10 +132,6 @@ export default function MapsTab({ completedQuests }) {
   const toggleQuest = (id) => {
     setVisibleQuests(prev => ({ ...prev, [id]: !prev[id] }));
   };
-
-  // --- ROBUST IMAGE URL ---
-  const imageName = MAP_IMAGE_OVERRIDES[selectedMapId] || selectedMapId;
-  const mapImageUrl = `https://assets.tarkov.dev/maps/${imageName}-2d.png`;
 
   return (
     <div className="tab-content" style={{display: 'flex', height: '80vh', gap: '20px'}}>
@@ -158,21 +177,22 @@ export default function MapsTab({ completedQuests }) {
         ) : (
             <div style={{width: '100%', height: '100%', overflow: 'auto', position: 'relative'}}>
                 <div style={{position: 'relative', width: 'fit-content'}}>
-                    <img 
-                        src={mapImageUrl} 
-                        alt="Map" 
-                        style={{display: 'block'}} 
-                        onError={(e) => {
-                             e.target.style.display='none'; 
-                             // Fallback message if even the official image fails
-                             e.target.parentNode.innerHTML += '<div style="padding:20px;color:#aaa">Map image load failed.</div>';
-                        }}
-                    />
+                    {/* DYNAMIC MAP IMAGE */}
+                    {mapConfig[selectedMapId] && (
+                        <img 
+                            src={mapConfig[selectedMapId].imageUrl} 
+                            alt={selectedMapId}
+                            style={{display: 'block'}} 
+                            onError={(e) => {
+                                e.target.style.display='none'; 
+                                e.target.parentNode.innerHTML += '<div style="padding:20px;color:#aaa">Image failed to load.</div>';
+                            }}
+                        />
+                    )}
 
-                    {(questLocations[selectedMapId === 'factory4_day' ? 'factory' : selectedMapId] || []).map((m, i) => {
-                        if (completedQuests.includes(m.questId)) return null;
+                    {/* MARKERS */}
+                    {activeQuests.map((m, i) => {
                         if (!visibleQuests[m.questId]) return null;
-
                         return (
                             <div 
                                 key={i}
