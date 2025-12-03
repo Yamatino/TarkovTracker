@@ -13,7 +13,6 @@ export default function PriceChecker({ globalData, itemProgress, hideoutLevels, 
     if (!term.trim()) return;
     const q = term.toLowerCase().trim();
 
-    // Search the GLOBAL cache directly
     let matches = globalData.items.filter(i => 
         (i.name && i.name.toLowerCase().includes(q)) || 
         (i.shortName && i.shortName.toLowerCase().includes(q))
@@ -45,7 +44,6 @@ export default function PriceChecker({ globalData, itemProgress, hideoutLevels, 
             const totalNeeded = questNeeded + hideoutNeeded;
             const isComplete = userHas >= totalNeeded && totalNeeded > 0;
 
-            // Prices are now pre-loaded in globalData.items!
             let bestTrader = { name: "None", price: 0 }, finalFlea = 0;
             if (item.sellFor) {
                 item.sellFor.forEach(sale => {
@@ -56,7 +54,6 @@ export default function PriceChecker({ globalData, itemProgress, hideoutLevels, 
             }
             const profit = finalFlea - bestTrader.price;
 
-            // Squad Logic
             const squadNeeds = [];
             if (squadMembers && squadMembers.length > 0) {
                 squadMembers.forEach(m => {
@@ -71,7 +68,13 @@ export default function PriceChecker({ globalData, itemProgress, hideoutLevels, 
                 });
             }
 
-            const isKey = item.types?.includes('key') || item.name.toLowerCase().includes('key');
+            // --- STRICT KEY CHECK ---
+            const nameLower = item.name.toLowerCase();
+            const looksLikeKey = (item.types?.includes('keys') || item.types?.includes('key') || nameLower.includes('key'));
+            const isWeaponPart = item.types?.includes('modification') || item.types?.includes('preset');
+            const isFalsePositive = nameLower.includes('keymod') || nameLower.includes('keyslot') || nameLower.includes('keymount');
+            
+            const isKey = looksLikeKey && !isWeaponPart && !isFalsePositive;
 
             return (
               <div key={idx} className="result-card">

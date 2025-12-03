@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
 import { runQuery } from '../api';
 
-// Bump cache version to force fresh download
-const CACHE_KEY = 'tarkov_global_cache_v11';
+// Bump to v12 to clean the cache
+const CACHE_KEY = 'tarkov_global_cache_v12';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; 
-const TARKOV_DATA_BASE = "https://raw.githubusercontent.com/TarkovTracker/tarkovdata/master";
 
 export function useGlobalData() {
     const [data, setData] = useState(null);
@@ -29,12 +28,12 @@ export function useGlobalData() {
                     }
                 }
 
-                // 2. Fetch API Data (The Heavy Part)
+                // 2. Fetch API Data
                 setStatus("Fetching Tarkov.dev Database...");
                 
                 const apiQuery = `
                 {
-                    items(limit: 4000) { 
+                    items(limit: 4500) { 
                         id name shortName iconLink types avg24hPrice 
                         sellFor { price currency vendor { name } }
                     }
@@ -59,8 +58,18 @@ export function useGlobalData() {
                 apiData.items.forEach(i => {
                     itemMap[i.id] = { ...i, questDetails: [], hideoutDetails: [] };
                     
-                    // Build Keys List while looping
-                    if ((i.types?.includes('key') || i.name.toLowerCase().includes('key')) && !i.types?.includes('barter')) {
+                    // --- STRICTER KEY FILTER ---
+                    const nameLower = i.name.toLowerCase();
+                    
+                    // 1. Must have "key" in name or type
+                    const looksLikeKey = (i.types?.includes('keys') || i.types?.includes('key') || nameLower.includes('key'));
+                    
+                    // 2. Must NOT be a weapon part or barter item (unless it's a marked key barter)
+                    const isWeaponPart = i.types?.includes('modification') || i.types?.includes('preset');
+                    const isFalsePositive = nameLower.includes('keymod') || nameLower.includes('keyslot') || nameLower.includes('keymount');
+                    const isTrash = i.types?.includes('barter') && !nameLower.includes('key'); // Only allow barter if it explicitly says key
+
+                    if (looksLikeKey && !isWeaponPart && !isFalsePositive && !isTrash) {
                         keysList.push(i);
                     }
                 });
@@ -105,7 +114,6 @@ export function useGlobalData() {
                     });
                 });
 
-                // Final Object
                 const globalData = {
                     items: Object.values(itemMap),
                     itemMap: itemMap,
@@ -114,11 +122,10 @@ export function useGlobalData() {
                     keys: keysList
                 };
 
-                // Try Saving (Catch quota error)
                 try {
                     localStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data: globalData }));
                 } catch (e) {
-                    console.warn("LocalStorage quota exceeded. App will work but data won't persist reload.");
+                    console.warn("Quota exceeded.");
                 }
 
                 setData(globalData);
@@ -126,7 +133,7 @@ export function useGlobalData() {
 
             } catch (e) {
                 console.error("Global Data Error:", e);
-                setStatus(`Error: ${e.message}. Check console.`);
+                setStatus(`Error: ${e.message}`);
             }
         };
 

@@ -98,6 +98,8 @@ function App() {
           <KeyringTab 
             globalData={globalData} 
             ownedKeys={ownedKeys} setOwnedKeys={setOwnedKeys} 
+            squadMembers={squadMembers}
+            squadData={squadData}
            />
         )}
         {activeTab === 'squad' && (
