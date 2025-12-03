@@ -8,8 +8,9 @@ import './App.css';
 function App() {
   const [activeTab, setActiveTab] = useState('search');
   
-  // Persistence
-  const [collectedIds, setCollectedIds] = useLocalStorage('tarkov_collected', []);
+  // CHANGED: We now store an object { itemId: count } instead of an array
+  // We use a new key 'tarkov_progress_v2' to avoid crashing old data
+  const [itemProgress, setItemProgress] = useLocalStorage('tarkov_progress_v2', {});
   const [hideoutLevels, setHideoutLevels] = useLocalStorage('tarkov_hideout_levels', {});
 
   return (
@@ -27,8 +28,8 @@ function App() {
         {activeTab === 'search' && <PriceChecker />}
         {activeTab === 'tracker' && (
           <TrackerTab 
-            collectedIds={collectedIds} 
-            setCollectedIds={setCollectedIds}
+            itemProgress={itemProgress} 
+            setItemProgress={setItemProgress}
             hideoutLevels={hideoutLevels}
           />
         )}

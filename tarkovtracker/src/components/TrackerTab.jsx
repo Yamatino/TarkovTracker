@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { runQuery } from '../api';
 
-export default function TrackerTab({ collectedIds, setCollectedIds, hideoutLevels }) {
-  const [items, setItems] = useState([]);
+// Accept itemProgress (object) instead of collectedIds (array)
+export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevels }) {
+  const [items, setItems] = useState({ questMap: {}, hideoutReqs: [] });
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("");
   const [excludeCollector, setExcludeCollector] = useState(true);
 
   useEffect(() => {
+    // Query remains the same
     const query = `
     {
       tasks {
@@ -33,13 +35,12 @@ export default function TrackerTab({ collectedIds, setCollectedIds, hideoutLevel
   }, []);
 
   const processData = (data) => {
-    const questMap = {}; // { itemId: { count: 0, collectorOnly: bool, name: "" } }
-    const hideoutReqs = []; // Array of raw reqs
+    const questMap = {}; 
+    const hideoutReqs = []; 
 
-    // 1. Process Quests
     data.tasks.forEach(task => {
       const isCollector = task.name === "Collector";
-      const taskItems = {}; // Prevent double counting find/give in same task
+      const taskItems = {}; 
 
       task.objectives.forEach(obj => {
         if (obj.item) {
@@ -60,15 +61,11 @@ export default function TrackerTab({ collectedIds, setCollectedIds, hideoutLevel
         if (needed > 0) {
           if (!questMap[id]) questMap[id] = { count: 0, collectorOnly: true, name: t.name };
           if (!isCollector) questMap[id].collectorOnly = false;
-          
-          // Only add to count if it's NOT collector (or if we track collector separately)
-          // For now, add everything, we filter later
-          questMap[id].count += needed;
+          if (questMap[id].collectorOnly) questMap[id].count += needed;
         }
       });
     });
 
-    // 2. Process Hideout
     data.hideoutStations.forEach(station => {
       station.levels.forEach(lvl => {
         lvl.itemRequirements.forEach(req => {
@@ -89,14 +86,23 @@ export default function TrackerTab({ collectedIds, setCollectedIds, hideoutLevel
     setLoading(false);
   };
 
+  // --- Logic to Update Count ---
+  const updateCount = (id, delta) => {
+    const current = itemProgress[id] || 0;
+    const newVal = Math.max(0, current + delta);
+    
+    // Create new object reference to trigger React update
+    setItemProgress(prev => ({
+        ...prev,
+        [id]: newVal
+    }));
+  };
+
   // --- RENDER LOGIC ---
   if (loading) return <div>Loading Tracker Database...</div>;
 
-  // Calculate totals based on CURRENT settings
   const displayList = [];
-  const processedIds = new Set();
-
-  // Helper to get or create entry
+  
   const getEntry = (id, name) => {
     let entry = displayList.find(x => x.id === id);
     if (!entry) {
@@ -106,14 +112,12 @@ export default function TrackerTab({ collectedIds, setCollectedIds, hideoutLevel
     return entry;
   };
 
-  // Add Quests
   Object.keys(items.questMap).forEach(id => {
     const q = items.questMap[id];
     if (excludeCollector && q.collectorOnly) return;
     getEntry(id, q.name).quest += q.count;
   });
 
-  // Add Hideout (Dynamic)
   items.hideoutReqs.forEach(req => {
     const currentLvl = hideoutLevels[req.station] || 0;
     if (currentLvl < req.level) {
@@ -121,18 +125,10 @@ export default function TrackerTab({ collectedIds, setCollectedIds, hideoutLevel
     }
   });
 
-  // Filter and Sort
   const finalView = displayList
     .filter(x => (x.quest + x.hideout) > 0)
     .filter(x => x.name.toLowerCase().includes(filter.toLowerCase()))
     .sort((a, b) => a.name.localeCompare(b.name));
-
-  const toggleItem = (id) => {
-    const newSet = new Set(collectedIds);
-    if (newSet.has(id)) newSet.delete(id);
-    else newSet.add(id);
-    setCollectedIds([...newSet]);
-  };
 
   return (
     <div className="tab-content">
@@ -154,22 +150,33 @@ export default function TrackerTab({ collectedIds, setCollectedIds, hideoutLevel
 
       <div className="item-list">
         {finalView.map(item => {
-          const isCollected = collectedIds.includes(item.id);
-          const hideoutStatus = item.hideout === 0 ? "DONE" : item.hideout;
+          const totalNeeded = item.quest + item.hideout;
+          const userHas = itemProgress[item.id] || 0;
           
+          let statusClass = "needed";
+          let statusText = "NEEDED";
+
+          if (userHas >= totalNeeded) {
+            statusClass = "collected";
+            statusText = "DONE";
+          } else if (userHas > 0) {
+            statusClass = "partial"; // You might need to add .partial color in CSS
+            statusText = `${userHas} / ${totalNeeded}`;
+          }
+
           return (
-            <div 
-              key={item.id} 
-              className={`item-row ${isCollected ? 'collected' : ''}`}
-              onDoubleClick={() => toggleItem(item.id)}
-            >
+            <div key={item.id} className={`item-row ${statusClass}`}>
               <div className="col-name">{item.name}</div>
-              <div className="col-total">{item.quest + item.hideout}</div>
+              
               <div className="col-breakdown">
-                Q: {item.quest} | H: {hideoutStatus}
+                Quest: {item.quest} | Hideout: {item.hideout === 0 ? "DONE" : item.hideout}
               </div>
-              <div className="col-status">
-                {isCollected ? "COLLECTED" : "NEEDED"}
+
+              {/* NEW CONTROL SECTION */}
+              <div className="col-controls">
+                <button className="btn-mini" onClick={() => updateCount(item.id, -1)}>-</button>
+                <span className="count-display">{userHas} / {totalNeeded}</span>
+                <button className="btn-mini" onClick={() => updateCount(item.id, 1)}>+</button>
               </div>
             </div>
           );
