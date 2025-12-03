@@ -14,6 +14,7 @@ const GENERAL_SQUAD_ID = "general-lobby";
 export default function SquadTab({ user, squadCode, joinSquad, squadMembers, squadData }) {
   const [inputCode, setInputCode] = useState("");
   const [newName, setNewName] = useState("");
+  const [newPhoto, setNewPhoto] = useState(""); // New state for photo URL
   const [isEditing, setIsEditing] = useState(false);
 
   // Login State
@@ -23,16 +24,29 @@ export default function SquadTab({ user, squadCode, joinSquad, squadMembers, squ
   const [authError, setAuthError] = useState("");
   const [isRegistering, setIsRegistering] = useState(false);
 
-  const handleUpdateName = async () => {
-    if (!newName.trim() || !user) return;
-    await updateProfile(user, { displayName: newName });
+  const handleUpdateProfile = async () => {
+    if (!user) return;
     
-    if (squadCode && squadCode !== GENERAL_SQUAD_ID) {
-        const memberRef = doc(db, 'squads', squadCode, 'members', user.uid);
-        await setDoc(memberRef, { name: newName }, { merge: true });
+    const updates = {};
+    if (newName.trim()) updates.displayName = newName;
+    if (newPhoto.trim()) updates.photoURL = newPhoto;
+
+    if (Object.keys(updates).length > 0) {
+        // 1. Update Auth Profile
+        await updateProfile(user, updates);
+        
+        // 2. Update Database Entry
+        if (squadCode) {
+            const memberRef = doc(db, 'squads', squadCode, 'members', user.uid);
+            await setDoc(memberRef, { 
+                name: newName || user.displayName,
+                photo: newPhoto || user.photoURL 
+            }, { merge: true });
+        }
+        
+        window.location.reload(); 
     }
     setIsEditing(false);
-    window.location.reload(); 
   };
 
   const handleJoinGeneral = () => {
@@ -55,142 +69,87 @@ export default function SquadTab({ user, squadCode, joinSquad, squadMembers, squ
       }
   };
 
-  // --- LOGGED OUT ---
+  // --- LOGGED OUT VIEW ---
   if (!user) {
     return (
         <div className="tab-content" style={{textAlign:'center', marginTop:'50px', maxWidth:'400px', margin:'50px auto'}}>
             <h2 style={{color:'var(--accent-color)', marginBottom: '30px'}}>Tarkov Tracker Sync</h2>
             
-            {/* STYLED TABS */}
-            <div style={{
-                display:'flex', marginBottom:'20px', borderBottom: '2px solid #333'
-            }}>
-                <button 
-                    onClick={() => setAuthMode('google')}
-                    style={{
-                        flex: 1,
-                        padding: '10px',
-                        background: 'transparent',
-                        border: 'none',
-                        borderBottom: authMode === 'google' ? '3px solid var(--accent-color)' : 'none',
-                        color: authMode === 'google' ? '#fff' : '#666',
-                        fontWeight: 'bold',
-                        cursor: 'pointer'
-                    }}
-                >Google</button>
-                <button 
-                    onClick={() => setAuthMode('email')}
-                    style={{
-                        flex: 1,
-                        padding: '10px',
-                        background: 'transparent',
-                        border: 'none',
-                        borderBottom: authMode === 'email' ? '3px solid var(--accent-color)' : 'none',
-                        color: authMode === 'email' ? '#fff' : '#666',
-                        fontWeight: 'bold',
-                        cursor: 'pointer'
-                    }}
-                >Email / Password</button>
+            <div style={{display:'flex', marginBottom:'20px', borderBottom: '2px solid #333'}}>
+                <button onClick={() => setAuthMode('google')} style={{flex: 1, padding: '10px', background: 'transparent', border: 'none', borderBottom: authMode === 'google' ? '3px solid var(--accent-color)' : 'none', color: authMode === 'google' ? '#fff' : '#666', fontWeight: 'bold', cursor: 'pointer'}}>Google</button>
+                <button onClick={() => setAuthMode('email')} style={{flex: 1, padding: '10px', background: 'transparent', border: 'none', borderBottom: authMode === 'email' ? '3px solid var(--accent-color)' : 'none', color: authMode === 'email' ? '#fff' : '#666', fontWeight: 'bold', cursor: 'pointer'}}>Email / Password</button>
             </div>
 
             {authMode === 'google' ? (
                 <div style={{padding: '20px 0'}}>
-                     <button 
-                        onClick={() => signInWithPopup(auth, googleProvider)}
-                        style={{
-                            padding:'12px 24px', fontSize:'1.1rem', cursor:'pointer', 
-                            background:'#fff', color:'#000', border:'none', borderRadius:'4px', fontWeight:'bold',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', width: '100%'
-                        }}
-                    >
-                        <img src="https://www.google.com/favicon.ico" width="20" alt="" />
-                        Sign in with Google
+                     <button onClick={() => signInWithPopup(auth, googleProvider)} style={{padding:'12px 24px', fontSize:'1.1rem', cursor:'pointer', background:'#fff', color:'#000', border:'none', borderRadius:'4px', fontWeight:'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', width: '100%'}}>
+                        <img src="https://www.google.com/favicon.ico" width="20" alt="" /> Sign in with Google
                     </button>
                 </div>
             ) : (
                 <form onSubmit={handleEmailAuth} style={{display:'flex', flexDirection:'column', gap:'15px', textAlign:'left'}}>
-                    <div>
-                        <label style={{display:'block', fontSize:'0.8em', marginBottom:'5px', color:'#aaa'}}>Email</label>
-                        <input 
-                            type="email" 
-                            value={email} 
-                            onChange={e => setEmail(e.target.value)}
-                            required
-                            style={{width:'100%', padding: '10px', background: '#222', border: '1px solid #444', color: '#fff'}}
-                        />
-                    </div>
-                    <div>
-                        <label style={{display:'block', fontSize:'0.8em', marginBottom:'5px', color:'#aaa'}}>Password</label>
-                        <input 
-                            type="password" 
-                            value={password} 
-                            onChange={e => setPassword(e.target.value)}
-                            required
-                            style={{width:'100%', padding: '10px', background: '#222', border: '1px solid #444', color: '#fff'}}
-                        />
-                    </div>
-
+                    <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email" required style={{width:'100%', padding: '10px', background: '#222', border: '1px solid #444', color: '#fff'}} />
+                    <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" required style={{width:'100%', padding: '10px', background: '#222', border: '1px solid #444', color: '#fff'}} />
                     {authError && <div style={{color:'#ff5252', fontSize:'0.9em', background: 'rgba(255, 82, 82, 0.1)', padding: '10px', borderRadius: '4px'}}>{authError}</div>}
-                    
-                    <button type="submit" style={{padding:'12px', background:'var(--accent-color)', color:'white', border:'none', borderRadius:'4px', cursor:'pointer', fontWeight:'bold', fontSize: '1rem', marginTop: '10px'}}>
-                        {isRegistering ? "Create Account" : "Log In"}
-                    </button>
-                    
-                    <div style={{textAlign:'center', fontSize:'0.9em', marginTop:'10px', color:'#aaa'}}>
-                        {isRegistering ? "Already have an account?" : "Need an account?"} 
-                        <span 
-                            onClick={() => setIsRegistering(!isRegistering)} 
-                            style={{color:'var(--accent-color)', cursor:'pointer', marginLeft:'5px', textDecoration:'underline'}}
-                        >
-                            {isRegistering ? "Log In" : "Register"}
-                        </span>
-                    </div>
+                    <button type="submit" style={{padding:'12px', background:'var(--accent-color)', color:'white', border:'none', borderRadius:'4px', cursor:'pointer', fontWeight:'bold', fontSize: '1rem', marginTop: '10px'}}>{isRegistering ? "Create Account" : "Log In"}</button>
+                    <div style={{textAlign:'center', fontSize:'0.9em', marginTop:'10px', color:'#aaa'}}>{isRegistering ? "Already have an account?" : "Need an account?"} <span onClick={() => setIsRegistering(!isRegistering)} style={{color:'var(--accent-color)', cursor:'pointer', marginLeft:'5px', textDecoration:'underline'}}>{isRegistering ? "Log In" : "Register"}</span></div>
                 </form>
             )}
         </div>
     );
   }
 
-  // --- LOGGED IN ---
   const isGeneral = squadCode === GENERAL_SQUAD_ID;
 
   return (
     <div className="tab-content">
       {/* USER HEADER */}
-      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px', background:'#222', padding:'10px', borderRadius:'8px'}}>
-        <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px', background:'#222', padding:'10px', borderRadius:'8px', flexWrap: 'wrap', gap: '10px'}}>
+        <div style={{display:'flex', alignItems:'center', gap:'15px', flex: 1}}>
+            {/* Avatar Display */}
             {user.photoURL ? (
-                <img src={user.photoURL} style={{width:40, borderRadius:'50%'}} alt="" />
+                <img src={user.photoURL} style={{width:50, height:50, borderRadius:'50%', objectFit:'cover', border: '2px solid #444'}} alt="" />
             ) : (
-                <div style={{width:40, height:40, borderRadius:'50%', background:'#555', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'bold'}}>
+                <div style={{width:50, height:50, borderRadius:'50%', background:'#555', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'bold', fontSize:'1.2rem'}}>
                     {user.displayName ? user.displayName.charAt(0).toUpperCase() : "?"}
                 </div>
             )}
             
+            {/* Edit Mode */}
             {isEditing ? (
-                <div style={{display:'flex', gap:'5px'}}>
+                <div style={{display:'flex', flexDirection: 'column', gap:'5px', flex: 1}}>
                     <input 
                         value={newName} 
                         onChange={e => setNewName(e.target.value)} 
-                        placeholder={user.displayName}
-                        style={{padding:'4px'}}
+                        placeholder="Display Name"
+                        style={{padding:'6px', width: '100%', maxWidth: '200px'}}
                     />
-                    <button onClick={handleUpdateName} className="btn-mini" style={{width:'auto', padding:'0 8px'}}>Save</button>
-                    <button onClick={() => setIsEditing(false)} className="btn-mini" style={{width:'auto', padding:'0 8px'}}>X</button>
+                    <input 
+                        value={newPhoto} 
+                        onChange={e => setNewPhoto(e.target.value)} 
+                        placeholder="Image URL (https://...)"
+                        style={{padding:'6px', width: '100%', maxWidth: '300px'}}
+                    />
+                    <div style={{display: 'flex', gap: '5px'}}>
+                        <button onClick={handleUpdateProfile} className="btn-mini" style={{width:'auto', padding:'4px 12px', background: 'var(--success-bg)', border:'none'}}>Save</button>
+                        <button onClick={() => setIsEditing(false)} className="btn-mini" style={{width:'auto', padding:'4px 12px'}}>Cancel</button>
+                    </div>
                 </div>
             ) : (
-                <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
-                    <span style={{fontWeight:'bold', fontSize:'1.1rem'}}>{user.displayName}</span>
-                    <button 
-                        onClick={() => { setIsEditing(true); setNewName(user.displayName || ""); }} 
-                        style={{background:'none', border:'none', cursor:'pointer', color:'#aaa', fontSize:'0.8rem'}}
-                    >
-                        (Edit)
-                    </button>
+                <div style={{display:'flex', flexDirection:'column'}}>
+                    <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
+                        <span style={{fontWeight:'bold', fontSize:'1.2rem'}}>{user.displayName}</span>
+                        <button 
+                            onClick={() => { setIsEditing(true); setNewName(user.displayName || ""); setNewPhoto(user.photoURL || ""); }} 
+                            style={{background:'none', border:'none', cursor:'pointer', color:'#aaa', fontSize:'0.8rem', textDecoration:'underline'}}
+                        >
+                            Edit Profile
+                        </button>
+                    </div>
                 </div>
             )}
         </div>
-        <button onClick={() => signOut(auth)} className="btn-mini" style={{width:'auto', padding:'0 10px', background:'#444'}}>Sign Out</button>
+        <button onClick={() => signOut(auth)} className="btn-mini" style={{width:'auto', padding:'8px 16px', background:'#444'}}>Sign Out</button>
       </div>
 
       {/* JOIN CONTROLS */}
@@ -231,14 +190,13 @@ export default function SquadTab({ user, squadCode, joinSquad, squadMembers, squ
             const data = squadData[m.uid] || {};
             const h = data.hideout || {};
             const q = data.quests || [];
-            
             const activeStations = Object.entries(h).filter(([_, lvl]) => lvl > 0);
 
             return (
                 <div key={m.uid} className="station-card" style={{display:'block'}}>
                     <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'10px', borderBottom:'1px solid #444', paddingBottom:'5px'}}>
                         {m.photo ? (
-                            <img src={m.photo} style={{width:30, borderRadius:'50%'}} alt="" />
+                            <img src={m.photo} style={{width:30, height: 30, borderRadius:'50%', objectFit: 'cover'}} alt="" />
                         ) : (
                             <div style={{width:30, height:30, borderRadius:'50%', background:'#555', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.8em', fontWeight:'bold'}}>
                                 {m.name ? m.name.charAt(0).toUpperCase() : "?"}
