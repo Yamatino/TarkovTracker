@@ -9,7 +9,6 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
   const [showCompleted, setShowCompleted] = useState(false);
 
   useEffect(() => {
-    // UPDATED QUERY: Added 'foundInRaid'
     const query = `
     {
       tasks {
@@ -59,7 +58,7 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
                 give: 0, find: 0, plant: 0, 
                 name: obj.item.name, 
                 icon: obj.item.iconLink,
-                fir: false // Track FIR requirement
+                fir: false
             };
           }
           
@@ -67,7 +66,6 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
           if (obj.type === 'findItem') taskItems[id].find += count;
           if (obj.type === 'plantItem') taskItems[id].plant += count;
           
-          // Mark as FIR if ANY objective for this item requires it
           if (obj.foundInRaid) taskItems[id].fir = true;
         }
       });
@@ -89,7 +87,6 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
           }
           
           if (!isCollector) questMap[id].collectorOnly = false;
-          // Propagate FIR requirement
           if (t.fir) questMap[id].fir = true;
 
           questMap[id].active += needed;
@@ -128,7 +125,6 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
       updateCount(id, current + delta);
   }
 
-  // --- RENDER LOGIC ---
   if (loading) return <div>Loading Tracker...</div>;
 
   const displayList = [];
@@ -157,7 +153,7 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
     }
   });
 
-  const allItems = displayList
+  const finalView = displayList
     .filter(x => {
         if (!x.name.toLowerCase().includes(filter.toLowerCase())) return false;
         const total = x.quest + x.hideout;
@@ -168,54 +164,6 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
         return !isComplete && total > 0;
     })
     .sort((a, b) => a.name.localeCompare(b.name));
-
-  const hideoutItems = allItems.filter(i => i.hideout > 0);
-  const questItems = allItems.filter(i => i.quest > 0);
-
-  const renderRow = (item, typeNeeded) => {
-    const totalNeeded = item.quest + item.hideout;
-    const userHas = itemProgress[item.id] || 0;
-    
-    let statusClass = "needed";
-    if (userHas >= totalNeeded) statusClass = "collected";
-    else if (userHas > 0) statusClass = "partial";
-
-    return (
-      <div key={item.id} className={`item-row ${statusClass}`}>
-        <div className="col-img">
-            {item.icon && <img src={item.icon} alt="" className="item-icon" />}
-        </div>
-        <div className="col-name">
-          {/* FIR INDICATOR: Asterisk */}
-          <div style={{display:'flex', alignItems:'center'}}>
-            {item.name}
-            {/* Show * only if this item needs to be found in raid */}
-            {item.fir && typeNeeded === 'quest' && (
-                <span title="Found In Raid Required" style={{color:'#ffd700', marginLeft:'5px', fontSize:'1.2rem', fontWeight:'bold'}}>*</span>
-            )}
-          </div>
-        </div>
-        
-        <div className="col-breakdown">
-            {typeNeeded === 'hideout' && `Hideout: ${item.hideout}`}
-            {typeNeeded === 'quest' && `Quest: ${item.quest}`}
-        </div>
-
-        <div className="col-controls">
-          <button className="btn-mini" onClick={() => adjustCount(item.id, -1)}>-</button>
-          <input 
-              type="number" 
-              className="count-input"
-              value={userHas.toString()}
-              onChange={(e) => updateCount(item.id, e.target.value)}
-              onClick={(e) => e.target.select()} 
-          />
-          <span className="count-total"> / {totalNeeded}</span>
-          <button className="btn-mini" onClick={() => adjustCount(item.id, 1)}>+</button>
-        </div>
-      </div>
-    );
-  };
 
   return (
     <div className="tab-content">
@@ -240,29 +188,59 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
         </div>
       </div>
 
-      {hideoutItems.length > 0 && (
-          <>
-            <h3 className="section-title">Hideout Requirements</h3>
-            <div className="item-list">
-                {hideoutItems.map(item => renderRow(item, 'hideout'))}
-            </div>
-          </>
-      )}
+      <div className="item-list">
+        {finalView.length > 0 ? finalView.map(item => {
+            const totalNeeded = item.quest + item.hideout;
+            const userHas = itemProgress[item.id] || 0;
+            
+            let statusClass = "needed";
+            if (userHas >= totalNeeded) statusClass = "collected";
+            else if (userHas > 0) statusClass = "partial";
 
-      {questItems.length > 0 && (
-          <>
-            <h3 className="section-title">Quest Requirements</h3>
-            <div className="item-list">
-                {questItems.map(item => renderRow(item, 'quest'))}
+            // Generate Breakdown Text
+            const parts = [];
+            if (item.quest > 0) parts.push(`Quest: ${item.quest}`);
+            if (item.hideout > 0) parts.push(`Hideout: ${item.hideout}`);
+            const breakdown = parts.join(" | ");
+
+            return (
+              <div key={item.id} className={`item-row ${statusClass}`}>
+                <div className="col-img">
+                    {item.icon && <img src={item.icon} alt="" className="item-icon" />}
+                </div>
+                <div className="col-name">
+                  <div style={{display:'flex', alignItems:'center'}}>
+                    {item.name}
+                    {item.fir && (
+                        <span style={{color:'#ffd700', marginLeft:'8px', fontSize:'0.8em', fontWeight:'bold'}}>(FIR)</span>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="col-breakdown">
+                    {breakdown}
+                </div>
+
+                <div className="col-controls">
+                  <button className="btn-mini" onClick={() => adjustCount(item.id, -1)}>-</button>
+                  <input 
+                      type="number" 
+                      className="count-input"
+                      value={userHas.toString()}
+                      onChange={(e) => updateCount(item.id, e.target.value)}
+                      onClick={(e) => e.target.select()} 
+                  />
+                  <span className="count-total"> / {totalNeeded}</span>
+                  <button className="btn-mini" onClick={() => adjustCount(item.id, 1)}>+</button>
+                </div>
+              </div>
+            );
+        }) : (
+            <div style={{textAlign: 'center', padding: '40px', color: '#666'}}>
+                {showCompleted ? "No items found." : "No active items needed."}
             </div>
-          </>
-      )}
-      
-      {hideoutItems.length === 0 && questItems.length === 0 && (
-          <div style={{textAlign: 'center', padding: '40px', color: '#666'}}>
-              {showCompleted ? "No items found." : "No active items needed."}
-          </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

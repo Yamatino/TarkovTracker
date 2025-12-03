@@ -317,7 +317,7 @@ export default function PriceChecker({ itemProgress, hideoutLevels, completedQue
                                             {item.questDetails.map((q, i) => (
                                                 <li key={i}>
                                                     {q.name} ({q.trader}): <span style={{fontWeight:'bold'}}>{q.count}</span>
-                                                    {q.fir && <span style={FIR_STYLE}>(Found In Raid)</span>}
+                                                    {q.fir && <span style={FIR_STYLE}>(FIR)</span>}
                                                 </li>
                                             ))}
                                         </ul>
