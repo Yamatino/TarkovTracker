@@ -7,7 +7,6 @@ export default function MapsTab({ completedQuests }) {
   const [maps, setMaps] = useState([]);
   const [selectedMapId, setSelectedMapId] = useState("customs");
   const [questLocations, setQuestLocations] = useState({}); 
-  const [mapImages, setMapImages] = useState({}); // Store exact filenames from community repo
   const [activeQuests, setActiveQuests] = useState([]); 
   const [visibleQuests, setVisibleQuests] = useState({}); 
   const [loading, setLoading] = useState(true);
@@ -18,7 +17,7 @@ export default function MapsTab({ completedQuests }) {
       try {
         setStatus("Fetching Map & Quest Data...");
         
-        // 1. Fetch API Data (For Names)
+        // 1. Fetch API Data
         const apiQuery = `
         {
           maps { id name }
@@ -26,49 +25,17 @@ export default function MapsTab({ completedQuests }) {
         }`;
         const apiData = await runQuery(apiQuery);
         
-        // 2. Fetch Community Data
-        const [mapsResp, questsResp] = await Promise.all([
-            fetch(`${TARKOV_DATA_BASE}/maps.json`),
-            fetch(`${TARKOV_DATA_BASE}/quests.json`)
-        ]);
-
-        const comMaps = await mapsResp.json();
+        // 2. Fetch Community Quest Coordinates
+        const questsResp = await fetch(`${TARKOV_DATA_BASE}/quests.json`);
         const comQuests = await questsResp.json();
 
-        // 3. Process Maps & Images
-        // We need to link the API ID (e.g. 'factory4_day') to the Community Key (e.g. 'factory')
-        // and then get the SVG filename.
-        const images = {};
-        const validMapIds = [];
-
-        // Helper to find community map config
-        const findComMap = (apiId) => {
-            // Try exact match
-            if (comMaps[apiId]) return comMaps[apiId];
-            // Try case insensitive
-            const key = Object.keys(comMaps).find(k => k.toLowerCase() === apiId.toLowerCase());
-            if (key) return comMaps[key];
-            // Try specific overrides
-            if (apiId === 'factory4_day') return comMaps['factory'];
-            return null;
-        };
-
-        apiData.maps.forEach(m => {
-            const config = findComMap(m.id);
-            if (config && config.svg && config.svg.file) {
-                images[m.id] = `${TARKOV_DATA_BASE}/maps/${config.svg.file}`;
-                validMapIds.push(m);
-            }
-        });
-
-        // 4. Process Quest Markers
+        // 3. Process Quest Markers
         const locations = {};
         comQuests.forEach(cTask => {
             if (cTask.objectives) {
                 cTask.objectives.forEach(obj => {
                     if (obj.maps) {
                         obj.maps.forEach(loc => {
-                            // Normalize map ID logic matches above
                             let mapId = loc.id.toLowerCase();
                             if (mapId === 'factory') mapId = 'factory4_day'; 
                             
@@ -87,8 +54,12 @@ export default function MapsTab({ completedQuests }) {
             }
         });
 
-        setMaps(validMapIds);
-        setMapImages(images);
+        // Filter out maps that don't have images on tarkov.dev usually
+        const validMaps = apiData.maps.filter(m => 
+            ["customs","factory4_day","interchange","lighthouse","reserve","shoreline","streets","woods","groundzero","laboratory"].includes(m.id)
+        );
+
+        setMaps(validMaps);
         setQuestLocations(locations);
         setStatus("");
         setLoading(false);
@@ -106,15 +77,17 @@ export default function MapsTab({ completedQuests }) {
   useEffect(() => {
     if (!maps.length) return;
 
-    const markers = questLocations[selectedMapId] || [];
+    // Handle map ID aliases
+    let lookupId = selectedMapId;
+    if (selectedMapId === 'factory4_day') lookupId = 'factory';
+
+    const markers = questLocations[lookupId] || [];
     const relevant = markers.filter(m => !completedQuests.includes(m.questId));
     
-    // Unique list for sidebar
     const unique = [...new Map(relevant.map(m => [m.questId, m])).values()];
     
     setActiveQuests(unique);
 
-    // Default to visible
     const vis = {};
     unique.forEach(q => vis[q.questId] = true);
     setVisibleQuests(vis);
@@ -125,10 +98,13 @@ export default function MapsTab({ completedQuests }) {
     setVisibleQuests(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
+  // Use Official Tarkov.dev Images
+  const mapImageUrl = `https://assets.tarkov.dev/maps/${selectedMapId}-2d.png`;
+
   return (
     <div className="tab-content" style={{display: 'flex', height: '80vh', gap: '20px'}}>
       
-      {/* LEFT SIDEBAR */}
+      {/* SIDEBAR */}
       <div style={{width: '280px', display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto'}}>
         <div className="result-card">
             <h3>Select Map</h3>
@@ -169,15 +145,13 @@ export default function MapsTab({ completedQuests }) {
         ) : (
             <div style={{width: '100%', height: '100%', overflow: 'auto', position: 'relative'}}>
                 <div style={{position: 'relative', width: 'fit-content'}}>
-                    {/* SVG MAP IMAGE */}
                     <img 
-                        src={mapImages[selectedMapId]} 
-                        alt={selectedMapId}
+                        src={mapImageUrl} 
+                        alt="Map" 
                         style={{display: 'block'}} 
                     />
 
-                    {/* MARKERS */}
-                    {(questLocations[selectedMapId] || []).map((m, i) => {
+                    {(questLocations[selectedMapId === 'factory4_day' ? 'factory' : selectedMapId] || []).map((m, i) => {
                         if (completedQuests.includes(m.questId)) return null;
                         if (!visibleQuests[m.questId]) return null;
 
@@ -193,7 +167,8 @@ export default function MapsTab({ completedQuests }) {
                                 <div className="marker-dot quest-dot"></div>
                                 <div className="marker-label">
                                     <strong>{m.title}</strong>
-                                    <div style={{fontSize:'0.8em', color:'#ccc'}}>{m.note}</div>
+                                    <br/>
+                                    <span style={{fontSize:'0.8em', color:'#ccc'}}>{m.note}</span>
                                 </div>
                             </div>
                         );
