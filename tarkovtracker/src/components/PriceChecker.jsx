@@ -42,13 +42,11 @@ export default function PriceChecker({ itemProgress, hideoutLevels }) {
     if (!term.trim()) return;
     const q = term.toLowerCase().trim();
 
-    // Basic String Match
     let matches = index.filter(i => 
         (i.name && i.name.toLowerCase().includes(q)) || 
         (i.shortName && i.shortName.toLowerCase().includes(q))
     );
     
-    // Sort (Prioritize Exact Matches & Shortest Names)
     matches.sort((a, b) => {
         const aShort = a.shortName ? a.shortName.toLowerCase() : "";
         const bShort = b.shortName ? b.shortName.toLowerCase() : "";
@@ -123,29 +121,65 @@ export default function PriceChecker({ itemProgress, hideoutLevels }) {
         const enrichedItems = data.items.map(item => {
             const itemId = item.id;
             
-            let questNeeded = 0;
+            // --- DETAILED QUEST LOGIC ---
+            const questDetails = [];
+            let totalQuestCount = 0;
+
             item.usedInTasks.forEach(task => {
-                let give = 0, find = 0, plant = 0;
+                let countForTask = 0;
                 task.objectives.forEach(obj => {
                     if (obj.item && obj.item.id === itemId) {
                         const count = obj.count || 1;
-                        if (obj.type === 'giveItem') give += count;
-                        if (obj.type === 'findItem') find += count;
-                        if (obj.type === 'plantItem') plant += count;
+                        if (obj.type === 'giveItem') countForTask += count;
+                        if (obj.type === 'findItem') countForTask += count;
+                        if (obj.type === 'plantItem') countForTask += count;
                     }
                 });
-                questNeeded += Math.max(give, find) + plant;
+
+                // Some quests have duplicate objectives (Find + Give), simplified logic:
+                // If sum is greater than 0, we record it. 
+                // Note: This sums Find + Give. Usually for "Shortage" (Find 3, Give 3) it might show 6.
+                // To be exact: Math.max(give, find) + plant is safer.
+                
+                let give = 0, find = 0, plant = 0;
+                task.objectives.forEach(obj => {
+                    if (obj.item && obj.item.id === itemId) {
+                        const c = obj.count || 1;
+                        if (obj.type === 'giveItem') give += c;
+                        if (obj.type === 'findItem') find += c;
+                        if (obj.type === 'plantItem') plant += c;
+                    }
+                });
+                const needed = Math.max(give, find) + plant;
+
+                if (needed > 0) {
+                    totalQuestCount += needed;
+                    questDetails.push({
+                        name: task.name,
+                        trader: task.trader?.name || "?",
+                        count: needed
+                    });
+                }
             });
 
-            let hideoutNeeded = 0;
+            // --- DETAILED HIDEOUT LOGIC ---
+            const hideoutDetails = [];
+            let totalHideoutCount = 0;
+
             data.hideoutStations.forEach(station => {
                 const stationName = station.name;
                 const currentLevel = hideoutLevels[stationName] || 0;
+                
                 station.levels.forEach(lvl => {
                     if (lvl.level > currentLevel) {
                         lvl.itemRequirements.forEach(req => {
                             if (req.item && req.item.id === itemId) {
-                                hideoutNeeded += req.count;
+                                totalHideoutCount += req.count;
+                                hideoutDetails.push({
+                                    station: stationName,
+                                    level: lvl.level,
+                                    count: req.count
+                                });
                             }
                         });
                     }
@@ -154,9 +188,9 @@ export default function PriceChecker({ itemProgress, hideoutLevels }) {
 
             return {
                 ...item,
-                totalNeeded: questNeeded + hideoutNeeded,
-                questNeeded,
-                hideoutNeeded
+                totalNeeded: totalQuestCount + totalHideoutCount,
+                questDetails,   // Array of {name, trader, count}
+                hideoutDetails  // Array of {station, level, count}
             };
         });
         
@@ -221,11 +255,37 @@ export default function PriceChecker({ itemProgress, hideoutLevels }) {
                         ) : (
                             <span>[!] NEEDED: {item.totalNeeded} (Have {userHas})</span>
                         )}
+                        
                         {!isComplete && (
-                            <ul style={{marginTop: '5px', marginBottom: '5px', fontSize: '0.9em'}}>
-                                {item.questNeeded > 0 && <li>Quests: {item.questNeeded}</li>}
-                                {item.hideoutNeeded > 0 && <li>Hideout: {item.hideoutNeeded}</li>}
-                            </ul>
+                            <div style={{marginTop: '10px', fontSize: '0.9em'}}>
+                                {/* QUESTS LIST */}
+                                {item.questDetails.length > 0 && (
+                                    <div style={{marginBottom: '5px'}}>
+                                        <div style={{fontWeight: 'bold', color: '#ffcc80'}}>Quests:</div>
+                                        <ul style={{margin: '2px 0 0 20px', padding: 0, color: '#e0e0e0'}}>
+                                            {item.questDetails.map((q, i) => (
+                                                <li key={i}>
+                                                    {q.name} ({q.trader}): <span style={{fontWeight:'bold'}}>{q.count}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                                
+                                {/* HIDEOUT LIST */}
+                                {item.hideoutDetails.length > 0 && (
+                                    <div>
+                                        <div style={{fontWeight: 'bold', color: '#90caf9'}}>Hideout:</div>
+                                        <ul style={{margin: '2px 0 0 20px', padding: 0, color: '#e0e0e0'}}>
+                                            {item.hideoutDetails.map((h, i) => (
+                                                <li key={i}>
+                                                    {h.station} (Lvl {h.level}): <span style={{fontWeight:'bold'}}>{h.count}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
                         )}
                     </div>
                 ) : (

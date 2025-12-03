@@ -6,7 +6,7 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("");
   const [excludeCollector, setExcludeCollector] = useState(true);
-  const [showCompleted, setShowCompleted] = useState(false); // NEW STATE
+  const [showCompleted, setShowCompleted] = useState(false);
 
   useEffect(() => {
     const query = `
@@ -32,7 +32,7 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
       if (!data) return;
       processData(data);
     });
-  }, [completedQuests]);
+  }, [completedQuests]); // Re-calculate when completedQuests changes
 
   const processData = (data) => {
     const questMap = {}; 
@@ -50,9 +50,8 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
     };
 
     data.tasks.forEach(task => {
-      if (completedQuests.includes(task.id)) return;
-
       const isCollector = task.name === "Collector";
+      const isQuestDone = completedQuests.includes(task.id); // Check if done via Graph
       const taskItems = {}; 
 
       task.objectives.forEach(obj => {
@@ -81,10 +80,24 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
         
         if (needed > 0) {
           if (!questMap[id]) {
-            questMap[id] = { count: 0, collectorOnly: true, name: t.name, icon: t.icon, type: t.type };
+            questMap[id] = { 
+                active: 0, // Still needed
+                doneViaQuest: 0, // Finished via Graph
+                collectorOnly: true, 
+                name: t.name, 
+                icon: t.icon, 
+                type: t.type 
+            };
           }
+          
           if (!isCollector) questMap[id].collectorOnly = false;
-          questMap[id].count += needed;
+          
+          // SPLIT LOGIC:
+          if (isQuestDone) {
+              questMap[id].doneViaQuest += needed;
+          } else {
+              questMap[id].active += needed;
+          }
         }
       });
     });
@@ -129,7 +142,12 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
   const getEntry = (id, name, icon, type) => {
     let entry = displayList.find(x => x.id === id);
     if (!entry) {
-      entry = { id, name, icon, type, quest: 0, hideout: 0 };
+      entry = { 
+          id, name, icon, type, 
+          questActive: 0, 
+          questDone: 0,
+          hideoutActive: 0 
+      };
       displayList.push(entry);
     }
     return entry;
@@ -138,43 +156,74 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
   Object.keys(items.questMap).forEach(id => {
     const q = items.questMap[id];
     if (excludeCollector && q.collectorOnly) return;
-    getEntry(id, q.name, q.icon, q.type).quest += q.count;
+    const entry = getEntry(id, q.name, q.icon, q.type);
+    entry.questActive += q.active;
+    entry.questDone += q.doneViaQuest;
   });
 
   items.hideoutReqs.forEach(req => {
     const currentLvl = hideoutLevels[req.station] || 0;
+    // If we have built the station, it's done. If not, it's active.
+    // We don't track "done" hideout items explicitly for history, 
+    // but we could. For now, we just track active needs.
     if (currentLvl < req.level) {
-      getEntry(req.id, req.name, req.icon, req.type).hideout += req.count;
+      getEntry(req.id, req.name, req.icon, req.type).hideoutActive += req.count;
     }
   });
 
   // Filter Search & Completion
-  const allNeededItems = displayList
-    .filter(x => (x.quest + x.hideout) > 0)
-    .filter(x => x.name.toLowerCase().includes(filter.toLowerCase()))
+  const allItems = displayList
     .filter(x => {
-        // NEW FILTER LOGIC
-        const total = x.quest + x.hideout;
-        const has = itemProgress[x.id] || 0;
-        const isCompleted = has >= total;
+        // Must match search
+        if (!x.name.toLowerCase().includes(filter.toLowerCase())) return false;
+
+        const totalActiveNeeded = x.questActive + x.hideoutActive;
+        const totalHistory = totalActiveNeeded + x.questDone; // Total including finished quests
+        const userHas = itemProgress[x.id] || 0;
         
-        // If "Show Completed" is TRUE, show everything
-        // If "Show Completed" is FALSE, hide completed items
-        if (showCompleted) return true;
-        return !isCompleted;
+        const isFullyComplete = (userHas >= totalActiveNeeded) && (totalActiveNeeded > 0);
+        const isDoneViaGraph = (totalActiveNeeded === 0 && x.questDone > 0);
+        
+        // If "Show Completed" is ON: Show everything that has EVER been needed
+        if (showCompleted) {
+            return totalHistory > 0;
+        }
+
+        // If "Show Completed" is OFF:
+        // Hide if fully collected manually OR if finished via graph
+        if (isFullyComplete) return false;
+        if (isDoneViaGraph) return false;
+        
+        return totalActiveNeeded > 0;
     })
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  const hideoutItems = allNeededItems.filter(i => i.hideout > 0);
-  const questItems = allNeededItems.filter(i => i.quest > 0);
+  // Split Lists
+  const hideoutItems = allItems.filter(i => i.hideoutActive > 0);
+  // Quest items: Show if active > 0 OR if we are showing completed history
+  const questItems = allItems.filter(i => i.questActive > 0 || (showCompleted && i.questDone > 0));
 
   const renderRow = (item, typeNeeded) => {
-    const totalNeeded = item.quest + item.hideout;
+    const activeNeeded = (typeNeeded === 'hideout') ? item.hideoutActive : item.questActive;
+    const doneViaGraph = (typeNeeded === 'quest') ? item.questDone : 0;
+    
+    // If active need is 0, but we are rendering because "Show Completed" is on:
+    const isGraphDone = activeNeeded === 0 && doneViaGraph > 0;
     const userHas = itemProgress[item.id] || 0;
     
     let statusClass = "needed";
-    if (userHas >= totalNeeded) statusClass = "collected";
+    if (isGraphDone) statusClass = "collected"; // Green because quest is done
+    else if (userHas >= activeNeeded) statusClass = "collected"; // Green because we collected enough
     else if (userHas > 0) statusClass = "partial";
+
+    // Text for the breakdown
+    let breakdown = "";
+    if (typeNeeded === 'hideout') {
+        breakdown = `Hideout: ${item.hideoutActive}`;
+    } else {
+        if (isGraphDone) breakdown = `Quest: DONE (${doneViaGraph} items)`;
+        else breakdown = `Quest: ${item.questActive}`;
+    }
 
     return (
       <div key={item.id} className={`item-row ${statusClass}`}>
@@ -189,11 +238,11 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
         </div>
         
         <div className="col-breakdown">
-            {typeNeeded === 'hideout' && `Hideout: ${item.hideout}`}
-            {typeNeeded === 'quest' && `Quest: ${item.quest}`}
+            {breakdown}
         </div>
 
         <div className="col-controls">
+          {/* If it's done via graph, disable inputs to avoid confusion, or keep them? Keeping them is fine. */}
           <button className="btn-mini" onClick={() => adjustCount(item.id, -1)}>-</button>
           <input 
               type="number" 
@@ -202,7 +251,8 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
               onChange={(e) => updateCount(item.id, e.target.value)}
               onClick={(e) => e.target.select()} 
           />
-          <span className="count-total"> / {totalNeeded}</span>
+          {/* If active needed is 0 (done via graph), show 0 as goal or checkmark? */}
+          <span className="count-total"> / {activeNeeded > 0 ? activeNeeded : "-"}</span>
           <button className="btn-mini" onClick={() => adjustCount(item.id, 1)}>+</button>
         </div>
       </div>
@@ -220,7 +270,6 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
         />
         
         <div style={{marginLeft: 'auto', display: 'flex', gap: '15px'}}>
-            {/* NEW: Show Completed Checkbox */}
             <label style={{display: 'flex', alignItems: 'center', gap: '8px', cursor:'pointer'}}>
             <input 
                 type="checkbox" 
