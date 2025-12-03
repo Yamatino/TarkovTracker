@@ -4,15 +4,25 @@ import { runQuery } from '../api';
 const CACHE_KEY = 'tarkov_item_index_v4';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; 
 
-// 1. Accept 'completedQuests' prop
-export default function PriceChecker({ itemProgress, hideoutLevels, completedQuests }) {
+const SQUAD_ALERT_STYLE = {
+    marginTop: '10px',
+    padding: '10px',
+    backgroundColor: 'rgba(33, 150, 243, 0.15)',
+    border: '1px solid #2196f3',
+    borderRadius: '4px',
+    color: '#90caf9',
+    fontSize: '0.9em'
+};
+
+const FIR_STYLE = { color: '#ffd700', fontWeight: 'bold', marginLeft: '5px' };
+
+export default function PriceChecker({ itemProgress, hideoutLevels, completedQuests, squadMembers, squadData }) {
   const [term, setTerm] = useState("");
   const [index, setIndex] = useState([]); 
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("Initializing...");
 
-  // Load Index (Same as before)
   useEffect(() => {
     const loadIndex = async () => {
       const cached = localStorage.getItem(CACHE_KEY);
@@ -35,7 +45,6 @@ export default function PriceChecker({ itemProgress, hideoutLevels, completedQue
     loadIndex();
   }, []);
 
-  // Search Logic (Same as before)
   const handleSearch = (e) => {
     e.preventDefault();
     if (!term.trim()) return;
@@ -66,21 +75,18 @@ export default function PriceChecker({ itemProgress, hideoutLevels, completedQue
     });
 
     const topMatches = matches.slice(0, 10);
-    
     if (topMatches.length === 0) {
         setResults([]);
         return;
     }
-
-    const idsToFetch = topMatches.map(m => m.id);
-    fetchDetails(idsToFetch);
+    fetchDetails(topMatches.map(m => m.id));
   };
 
   const fetchDetails = async (ids) => {
     setLoading(true);
     setResults([]); 
     
-    // UPDATED QUERY: We need 'id' inside usedInTasks to check against completedQuests
+    // UPDATED QUERY: Fetch 'foundInRaid'
     const query = `
     query getDetails($ids: [ID!]!) {
         items(ids: $ids) {
@@ -92,13 +98,14 @@ export default function PriceChecker({ itemProgress, hideoutLevels, completedQue
             sellFor { price currency vendor { name } }
             
             usedInTasks { 
-                id      # <--- Added ID here
+                id
                 name 
                 trader { name }
                 objectives {
                     type
                     ... on TaskObjectiveItem {
                         count
+                        foundInRaid
                         item { id }
                     }
                 }
@@ -121,22 +128,22 @@ export default function PriceChecker({ itemProgress, hideoutLevels, completedQue
     if (data && data.items) {
         const enrichedItems = data.items.map(item => {
             const itemId = item.id;
-            
             const questDetails = [];
             let totalQuestCount = 0;
 
             item.usedInTasks.forEach(task => {
-                // --- NEW FILTER LOGIC ---
-                // If this task ID is in our completed list, skip it entirely
                 if (completedQuests.includes(task.id)) return;
 
                 let give = 0, find = 0, plant = 0;
+                let isFir = false;
+
                 task.objectives.forEach(obj => {
                     if (obj.item && obj.item.id === itemId) {
                         const c = obj.count || 1;
                         if (obj.type === 'giveItem') give += c;
                         if (obj.type === 'findItem') find += c;
                         if (obj.type === 'plantItem') plant += c;
+                        if (obj.foundInRaid) isFir = true;
                     }
                 });
                 const needed = Math.max(give, find) + plant;
@@ -146,12 +153,12 @@ export default function PriceChecker({ itemProgress, hideoutLevels, completedQue
                     questDetails.push({
                         name: task.name,
                         trader: task.trader?.name || "?",
-                        count: needed
+                        count: needed,
+                        fir: isFir
                     });
                 }
             });
 
-            // Hideout Logic
             const hideoutDetails = [];
             let totalHideoutCount = 0;
 
@@ -227,6 +234,62 @@ export default function PriceChecker({ itemProgress, hideoutLevels, completedQue
             const finalFlea = realFleaPrice > 0 ? realFleaPrice : (item.avg24hPrice || 0);
             const profit = finalFlea - bestTrader.price;
 
+            // --- SQUAD CHECK LOGIC ---
+            const squadNeeds = [];
+            if (squadMembers && squadMembers.length > 0) {
+                squadMembers.forEach(member => {
+                    const mData = squadData[member.uid] || {};
+                    const mQuests = mData.quests || [];
+                    const mHideout = mData.hideout || {};
+                    const mProgress = mData.progress || {};
+                    const mHas = mProgress[item.id] || 0;
+
+                    let mNeeded = 0;
+                    let mNeededFir = false;
+
+                    if (item.usedInTasks) {
+                        item.usedInTasks.forEach(task => {
+                            if (mQuests.includes(task.id)) return; 
+                            
+                            let give=0, find=0, plant=0;
+                            let taskIsFir = false;
+                            
+                            task.objectives.forEach(obj => {
+                                if(obj.item?.id === item.id) {
+                                    const c = obj.count || 1;
+                                    if(obj.type==='giveItem') give+=c;
+                                    if(obj.type==='findItem') find+=c;
+                                    if(obj.type==='plantItem') plant+=c;
+                                    if(obj.foundInRaid) taskIsFir = true;
+                                }
+                            });
+                            const neededForTask = Math.max(give, find) + plant;
+                            if (neededForTask > 0) {
+                                mNeeded += neededForTask;
+                                if(taskIsFir) mNeededFir = true;
+                            }
+                        });
+                    }
+
+                    if (item.hideoutDetails) {
+                        item.hideoutDetails.forEach(h => {
+                            const memberStationLvl = mHideout[h.station] || 0;
+                            if (memberStationLvl < h.level) {
+                                mNeeded += h.count;
+                            }
+                        });
+                    }
+
+                    if (mNeeded > mHas) {
+                        squadNeeds.push({
+                            name: member.name,
+                            missing: mNeeded - mHas,
+                            fir: mNeededFir
+                        });
+                    }
+                });
+            }
+
             return (
             <div key={idx} className="result-card">
                 <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
@@ -254,6 +317,7 @@ export default function PriceChecker({ itemProgress, hideoutLevels, completedQue
                                             {item.questDetails.map((q, i) => (
                                                 <li key={i}>
                                                     {q.name} ({q.trader}): <span style={{fontWeight:'bold'}}>{q.count}</span>
+                                                    {q.fir && <span style={FIR_STYLE}>(FIR)</span>}
                                                 </li>
                                             ))}
                                         </ul>
@@ -277,6 +341,19 @@ export default function PriceChecker({ itemProgress, hideoutLevels, completedQue
                     </div>
                 ) : (
                     <div className="not-needed">No active tasks.</div>
+                )}
+
+                {/* SQUAD ALERT */}
+                {squadNeeds.length > 0 && (
+                    <div style={SQUAD_ALERT_STYLE}>
+                        <div style={{fontWeight:'bold', marginBottom:'5px'}}>Needed by Squad:</div>
+                        {squadNeeds.map((s, i) => (
+                            <div key={i}>
+                                • {s.name} needs <b>{s.missing}</b>
+                                {s.fir && <span style={FIR_STYLE}>(FIR)</span>}
+                            </div>
+                        ))}
+                    </div>
                 )}
                 
                 <div className="prices">
