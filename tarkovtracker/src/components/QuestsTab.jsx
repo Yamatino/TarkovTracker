@@ -13,31 +13,42 @@ import { runQuery } from '../api';
 
 const TRADERS = ["Prapor", "Therapist", "Skier", "Peacekeeper", "Mechanic", "Ragman", "Jaeger", "Fence"];
 
-// --- CUSTOM NODE COMPONENT (The Box) ---
 const QuestNode = ({ data }) => {
+  const isExternal = data.isExternal; 
+  
   return (
-    <div className={`quest-node ${data.isCompleted ? 'completed' : ''}`}>
-      <Handle type="target" position={Position.Top} style={{ background: '#555' }} />
+    <div className={`quest-node ${data.isCompleted ? 'completed' : ''} ${isExternal ? 'external' : ''}`}>
+      <Handle type="target" position={Position.Top} style={{ background: '#555', visibility: 'hidden' }} />
+      
       <div className="quest-title">{data.label}</div>
+      {isExternal && <div className="quest-trader">({data.trader})</div>}
+      
+      {/* ALWAYS show requirement if it exists */}
       {data.reqText && <div className="quest-req">{data.reqText}</div>}
-      <div className="quest-status">
-        {data.isCompleted ? "DONE" : "ACTIVE"}
-      </div>
-      <Handle type="source" position={Position.Bottom} style={{ background: '#555' }} />
+      
+      {!isExternal && (
+        <div className="quest-status">
+            {data.isCompleted ? "DONE" : "ACTIVE"}
+        </div>
+      )}
+      
+      <Handle type="source" position={Position.Bottom} style={{ background: '#555', visibility: 'hidden' }} />
     </div>
   );
 };
+
 const nodeTypes = { quest: QuestNode };
 
-// --- LAYOUT ALGORITHM (Dagre) ---
 const getLayoutedElements = (nodes, edges) => {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
 
-  dagreGraph.setGraph({ rankdir: 'TB', ranksep: 80, nodesep: 50 }); // Top to Bottom
+  dagreGraph.setGraph({ rankdir: 'TB', ranksep: 100, nodesep: 60 });
 
   nodes.forEach((node) => {
-    dagreGraph.setNode(node.id, { width: 180, height: 80 }); // Box dimensions
+    // Dynamic height based on content (approximate)
+    const h = node.data.isExternal ? 70 : 100;
+    dagreGraph.setNode(node.id, { width: 180, height: h });
   });
 
   edges.forEach((edge) => {
@@ -51,8 +62,8 @@ const getLayoutedElements = (nodes, edges) => {
     return {
       ...node,
       position: {
-        x: nodeWithPosition.x - 90, // center anchor
-        y: nodeWithPosition.y - 40,
+        x: nodeWithPosition.x - 90,
+        y: nodeWithPosition.y - 50,
       },
     };
   });
@@ -68,7 +79,6 @@ export default function QuestsTab({ completedQuests, setCompletedQuests }) {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
-  // 1. Fetch Data
   useEffect(() => {
     const query = `
     {
@@ -90,68 +100,79 @@ export default function QuestsTab({ completedQuests, setCompletedQuests }) {
     });
   }, []);
 
-  // 2. Build Graph when Trader or Tasks change
   useEffect(() => {
     if (rawTasks.length === 0) return;
 
-    // Filter by Trader
-    const traderTasks = rawTasks.filter(t => t.trader.name === selectedTrader);
-    
-    // Create Nodes
-    const newNodes = [];
-    const newEdges = [];
-    const taskIdsInGraph = new Set(traderTasks.map(t => t.id));
+    const taskMap = new Map(rawTasks.map(t => [t.id, t]));
+    const primaryTasks = rawTasks.filter(t => t.trader.name === selectedTrader);
+    const nodesToRender = new Map();
 
-    traderTasks.forEach(task => {
-      let reqText = "";
-      
-      // Check for Parents (Previous Tasks)
-      let hasParent = false;
-      task.taskRequirements.forEach(req => {
-        // Only draw line if the parent is also from this trader (keeps graph clean)
-        // Note: Cross-trader dependencies exist, but complicate the view. 
-        if (taskIdsInGraph.has(req.task.id)) {
-            hasParent = true;
-            newEdges.push({
-                id: `e${req.task.id}-${task.id}`,
-                source: req.task.id,
-                target: task.id,
-                type: 'smoothstep',
-                animated: false,
-                style: { stroke: '#777' }
-            });
-        }
-      });
+    primaryTasks.forEach(t => nodesToRender.set(t.id, { task: t, isPrimary: true }));
 
-      // If no parent in this graph, show level req
-      if (!hasParent && task.minPlayerLevel > 1) {
-        reqText = `Requires Lvl ${task.minPlayerLevel}`;
-      }
-
-      newNodes.push({
-        id: task.id,
-        type: 'quest',
-        data: { 
-            label: task.name, 
-            reqText: reqText,
-            isCompleted: completedQuests.includes(task.id) 
-        },
-        position: { x: 0, y: 0 } // Dagre will fix this
-      });
+    primaryTasks.forEach(task => {
+        task.taskRequirements.forEach(req => {
+            const parentId = req.task.id;
+            if (!nodesToRender.has(parentId) && taskMap.has(parentId)) {
+                nodesToRender.set(parentId, { task: taskMap.get(parentId), isPrimary: false });
+            }
+        });
     });
 
-    // Calculate Layout
+    const newNodes = [];
+    const newEdges = [];
+
+    nodesToRender.forEach(({ task, isPrimary }, id) => {
+        // --- UPDATED LOGIC ---
+        // We now show the level requirement for ANY task > level 1
+        // regardless of whether it has parents or not.
+        let reqText = "";
+        if (task.minPlayerLevel > 1) {
+            reqText = `Req: Lvl ${task.minPlayerLevel}`;
+        }
+
+        newNodes.push({
+            id: task.id,
+            type: 'quest',
+            data: { 
+                label: task.name, 
+                trader: task.trader.name,
+                reqText: reqText,
+                isCompleted: completedQuests.includes(task.id),
+                isExternal: !isPrimary 
+            },
+            position: { x: 0, y: 0 }
+        });
+    });
+
+    nodesToRender.forEach(({ task, isPrimary }, id) => {
+        task.taskRequirements.forEach(req => {
+            const parentId = req.task.id;
+            if (nodesToRender.has(parentId)) {
+                 newEdges.push({
+                    id: `e${parentId}-${task.id}`,
+                    source: parentId,
+                    target: task.id,
+                    type: 'smoothstep',
+                    style: { stroke: isPrimary ? '#888' : '#555', strokeWidth: 2 }
+                });
+            }
+        });
+    });
+
     const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(newNodes, newEdges);
     setNodes(layoutedNodes);
     setEdges(layoutedEdges);
 
   }, [rawTasks, selectedTrader, completedQuests, setNodes, setEdges]);
 
-  // 3. Handle Click (Toggle Complete)
   const onNodeClick = useCallback((event, node) => {
+    if (node.data.isExternal) {
+        alert(`This is a ${node.data.trader} quest. Switch to their tab to manage it.`);
+        return;
+    }
+
     const isDone = completedQuests.includes(node.id);
     let newCompleted;
-    
     if (isDone) {
         newCompleted = completedQuests.filter(id => id !== node.id);
     } else {
@@ -169,12 +190,12 @@ export default function QuestsTab({ completedQuests, setCompletedQuests }) {
         <select value={selectedTrader} onChange={e => setSelectedTrader(e.target.value)}>
             {TRADERS.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
-        <span style={{marginLeft: 'auto', fontSize: '0.9em', color: '#888'}}>
-            Click a box to toggle completion. Items will vanish from Tracker automatically.
+        <span style={{marginLeft: 'auto', fontSize: '0.8em', color: '#888'}}>
+            Ghost nodes are requirements from other traders.
         </span>
       </div>
 
-      <div style={{ width: '100%', height: '100%', border: '1px solid #333', borderRadius: '8px' }}>
+      <div style={{ width: '100%', height: '100%', border: '1px solid #333', borderRadius: '8px', background: '#1a1a1a' }}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -183,9 +204,9 @@ export default function QuestsTab({ completedQuests, setCompletedQuests }) {
           onNodeClick={onNodeClick}
           nodeTypes={nodeTypes}
           fitView
-          minZoom={0.2}
+          minZoom={0.1}
         >
-          <Background color="#333" gap={16} />
+          <Background color="#222" gap={20} />
           <Controls />
         </ReactFlow>
       </div>

@@ -242,3 +242,75 @@ input[type="text"], input[type="number"], select {
 .quest-node.completed .quest-status {
   color: #fff;
 }
+
+/* src/App.css - Add this to the end */
+
+.quest-node {
+  padding: 10px;
+  border-radius: 4px;
+  background: var(--card-bg);
+  border: 1px solid #444;
+  color: #eee;
+  text-align: center;
+  width: 170px;
+  font-size: 0.8rem;
+  transition: all 0.2s;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+  position: relative;
+}
+
+.quest-node:hover {
+  border-color: var(--accent-color);
+  transform: scale(1.02);
+  cursor: pointer;
+  z-index: 10;
+}
+
+.quest-node.completed {
+  background: rgba(27, 94, 32, 0.6);
+  border-color: var(--success-bg);
+}
+
+/* --- EXTERNAL (GHOST) NODES --- */
+.quest-node.external {
+  background: #111;
+  border: 1px dashed #555;
+  color: #777;
+  opacity: 0.8;
+}
+.quest-node.external:hover {
+    border-color: #777;
+    cursor: help;
+}
+
+.quest-title {
+  font-weight: bold;
+  margin-bottom: 2px;
+}
+
+.quest-trader {
+    font-size: 0.7em;
+    font-style: italic;
+    color: #888;
+    margin-bottom: 4px;
+}
+
+.quest-req {
+  font-size: 0.7rem;
+  color: #ffcc80; 
+  margin-top: 4px;
+}
+
+.quest-status {
+  margin-top: 5px;
+  font-size: 0.65rem;
+  color: #aaa;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  border-top: 1px solid #333;
+  padding-top: 2px;
+}
+.quest-node.completed .quest-status {
+  color: #fff;
+  border-top-color: rgba(255,255,255,0.2);
+}
