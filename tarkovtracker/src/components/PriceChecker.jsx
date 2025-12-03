@@ -7,12 +7,14 @@ const CACHE_DURATION = 24 * 60 * 60 * 1000;
 const SQUAD_ALERT_STYLE = {
     marginTop: '10px',
     padding: '10px',
-    backgroundColor: 'rgba(33, 150, 243, 0.15)', // Blue tint
+    backgroundColor: 'rgba(33, 150, 243, 0.15)',
     border: '1px solid #2196f3',
     borderRadius: '4px',
     color: '#90caf9',
     fontSize: '0.9em'
 };
+
+const FIR_STYLE = { color: '#ffd700', fontWeight: 'bold', marginLeft: '5px' };
 
 export default function PriceChecker({ itemProgress, hideoutLevels, completedQuests, squadMembers, squadData }) {
   const [term, setTerm] = useState("");
@@ -21,7 +23,6 @@ export default function PriceChecker({ itemProgress, hideoutLevels, completedQue
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("Initializing...");
 
-  // 1. Load Index
   useEffect(() => {
     const loadIndex = async () => {
       const cached = localStorage.getItem(CACHE_KEY);
@@ -34,9 +35,7 @@ export default function PriceChecker({ itemProgress, hideoutLevels, completedQue
         }
       }
       setStatus("Downloading Item Database...");
-      
       const data = await runQuery(`{ items { id name shortName } }`);
-      
       if (data && data.items) {
         localStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data: data.items }));
         setIndex(data.items);
@@ -46,7 +45,6 @@ export default function PriceChecker({ itemProgress, hideoutLevels, completedQue
     loadIndex();
   }, []);
 
-  // 2. Search Logic
   const handleSearch = (e) => {
     e.preventDefault();
     if (!term.trim()) return;
@@ -57,7 +55,6 @@ export default function PriceChecker({ itemProgress, hideoutLevels, completedQue
         (i.shortName && i.shortName.toLowerCase().includes(q))
     );
     
-    // Sort Results
     matches.sort((a, b) => {
         const aShort = a.shortName ? a.shortName.toLowerCase() : "";
         const bShort = b.shortName ? b.shortName.toLowerCase() : "";
@@ -78,21 +75,18 @@ export default function PriceChecker({ itemProgress, hideoutLevels, completedQue
     });
 
     const topMatches = matches.slice(0, 10);
-    
     if (topMatches.length === 0) {
         setResults([]);
         return;
     }
-
-    const idsToFetch = topMatches.map(m => m.id);
-    fetchDetails(idsToFetch);
+    fetchDetails(topMatches.map(m => m.id));
   };
 
-  // 3. Fetch Details
   const fetchDetails = async (ids) => {
     setLoading(true);
     setResults([]); 
     
+    // UPDATED QUERY: Fetch 'foundInRaid'
     const query = `
     query getDetails($ids: [ID!]!) {
         items(ids: $ids) {
@@ -111,6 +105,7 @@ export default function PriceChecker({ itemProgress, hideoutLevels, completedQue
                     type
                     ... on TaskObjectiveItem {
                         count
+                        foundInRaid
                         item { id }
                     }
                 }
@@ -133,22 +128,22 @@ export default function PriceChecker({ itemProgress, hideoutLevels, completedQue
     if (data && data.items) {
         const enrichedItems = data.items.map(item => {
             const itemId = item.id;
-            
-            // --- YOUR QUEST LOGIC ---
             const questDetails = [];
             let totalQuestCount = 0;
 
             item.usedInTasks.forEach(task => {
-                // Skip if completed
                 if (completedQuests.includes(task.id)) return;
 
                 let give = 0, find = 0, plant = 0;
+                let isFir = false;
+
                 task.objectives.forEach(obj => {
                     if (obj.item && obj.item.id === itemId) {
                         const c = obj.count || 1;
                         if (obj.type === 'giveItem') give += c;
                         if (obj.type === 'findItem') find += c;
                         if (obj.type === 'plantItem') plant += c;
+                        if (obj.foundInRaid) isFir = true;
                     }
                 });
                 const needed = Math.max(give, find) + plant;
@@ -158,12 +153,12 @@ export default function PriceChecker({ itemProgress, hideoutLevels, completedQue
                     questDetails.push({
                         name: task.name,
                         trader: task.trader?.name || "?",
-                        count: needed
+                        count: needed,
+                        fir: isFir
                     });
                 }
             });
 
-            // --- YOUR HIDEOUT LOGIC ---
             const hideoutDetails = [];
             let totalHideoutCount = 0;
 
@@ -223,7 +218,6 @@ export default function PriceChecker({ itemProgress, hideoutLevels, completedQue
             const userHas = itemProgress[item.id] || 0;
             const isComplete = userHas >= item.totalNeeded && item.totalNeeded > 0;
             
-            // --- PRICE LOGIC ---
             let bestTrader = { name: "None", price: 0 };
             let realFleaPrice = 0;
 
@@ -250,37 +244,33 @@ export default function PriceChecker({ itemProgress, hideoutLevels, completedQue
                     const mProgress = mData.progress || {};
                     const mHas = mProgress[item.id] || 0;
 
-                    // Calculate Member Needs
                     let mNeeded = 0;
+                    let mNeededFir = false;
 
-                    // A. Member Quests
                     if (item.usedInTasks) {
                         item.usedInTasks.forEach(task => {
-                            if (mQuests.includes(task.id)) return; // They completed it
+                            if (mQuests.includes(task.id)) return; 
                             
                             let give=0, find=0, plant=0;
+                            let taskIsFir = false;
+                            
                             task.objectives.forEach(obj => {
                                 if(obj.item?.id === item.id) {
                                     const c = obj.count || 1;
                                     if(obj.type==='giveItem') give+=c;
                                     if(obj.type==='findItem') find+=c;
                                     if(obj.type==='plantItem') plant+=c;
+                                    if(obj.foundInRaid) taskIsFir = true;
                                 }
                             });
-                            mNeeded += Math.max(give, find) + plant;
+                            const neededForTask = Math.max(give, find) + plant;
+                            if (neededForTask > 0) {
+                                mNeeded += neededForTask;
+                                if(taskIsFir) mNeededFir = true;
+                            }
                         });
                     }
 
-                    // B. Member Hideout
-                    // Note: We need the global hideout data to calculate this perfectly, 
-                    // which we fetched in 'fetchDetails'. We can reuse the result logic structure roughly.
-                    // But 'hideoutDetails' is calculated for YOU. 
-                    // To do it for THEM, we must re-loop the global station data available in 'fetchDetails'.
-                    // Since 'fetchDetails' scope is closed, we rely on a simplified check here 
-                    // OR we assume hideout logic is uniform.
-                    
-                    // Actually, 'item.hideoutDetails' contains the raw requirements. 
-                    // We just need to check THEIR level vs that requirement.
                     if (item.hideoutDetails) {
                         item.hideoutDetails.forEach(h => {
                             const memberStationLvl = mHideout[h.station] || 0;
@@ -293,7 +283,8 @@ export default function PriceChecker({ itemProgress, hideoutLevels, completedQue
                     if (mNeeded > mHas) {
                         squadNeeds.push({
                             name: member.name,
-                            missing: mNeeded - mHas
+                            missing: mNeeded - mHas,
+                            fir: mNeededFir
                         });
                     }
                 });
@@ -309,7 +300,6 @@ export default function PriceChecker({ itemProgress, hideoutLevels, completedQue
                     </div>
                 </div>
 
-                {/* YOUR STATUS */}
                 {item.totalNeeded > 0 ? (
                     <div className={isComplete ? "status-complete" : "needed-alert"}>
                         {isComplete ? (
@@ -327,6 +317,7 @@ export default function PriceChecker({ itemProgress, hideoutLevels, completedQue
                                             {item.questDetails.map((q, i) => (
                                                 <li key={i}>
                                                     {q.name} ({q.trader}): <span style={{fontWeight:'bold'}}>{q.count}</span>
+                                                    {q.fir && <span style={FIR_STYLE}>(Found In Raid)</span>}
                                                 </li>
                                             ))}
                                         </ul>
@@ -359,6 +350,7 @@ export default function PriceChecker({ itemProgress, hideoutLevels, completedQue
                         {squadNeeds.map((s, i) => (
                             <div key={i}>
                                 • {s.name} needs <b>{s.missing}</b>
+                                {s.fir && <span style={FIR_STYLE}>(FIR)</span>}
                             </div>
                         ))}
                     </div>

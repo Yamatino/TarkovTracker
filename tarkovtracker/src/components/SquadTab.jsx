@@ -1,9 +1,28 @@
 import React, { useState } from 'react';
-import { auth, googleProvider } from '../firebaseConfig';
-import { signInWithPopup, signOut } from 'firebase/auth';
+import { auth, googleProvider, db } from '../firebaseConfig';
+import { signInWithPopup, signOut, updateProfile } from 'firebase/auth';
+import { doc, updateDoc, setDoc } from 'firebase/firestore';
 
 export default function SquadTab({ user, squadCode, joinSquad, squadMembers, squadData }) {
   const [inputCode, setInputCode] = useState(squadCode || "");
+  const [newName, setNewName] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
+
+  const handleUpdateName = async () => {
+    if (!newName.trim() || !user) return;
+    
+    // 1. Update Auth Profile (Local & Global)
+    await updateProfile(user, { displayName: newName });
+    
+    // 2. Update Squad Member Entry (If in a squad)
+    if (squadCode) {
+        const memberRef = doc(db, 'squads', squadCode, 'members', user.uid);
+        await setDoc(memberRef, { name: newName }, { merge: true });
+    }
+
+    setIsEditing(false);
+    window.location.reload(); // Force reload to reflect auth changes everywhere
+  };
 
   if (!user) {
     return (
@@ -21,14 +40,38 @@ export default function SquadTab({ user, squadCode, joinSquad, squadMembers, squ
 
   return (
     <div className="tab-content">
-      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px'}}>
+      {/* USER HEADER */}
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px', background:'#222', padding:'10px', borderRadius:'8px'}}>
         <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
-            {user.photoURL && <img src={user.photoURL} style={{width:30, borderRadius:'50%'}} alt="" />}
-            <span>{user.displayName}</span>
+            {user.photoURL && <img src={user.photoURL} style={{width:40, borderRadius:'50%'}} alt="" />}
+            
+            {isEditing ? (
+                <div style={{display:'flex', gap:'5px'}}>
+                    <input 
+                        value={newName} 
+                        onChange={e => setNewName(e.target.value)} 
+                        placeholder={user.displayName}
+                        style={{padding:'4px'}}
+                    />
+                    <button onClick={handleUpdateName} className="btn-mini" style={{width:'auto', padding:'0 8px'}}>Save</button>
+                    <button onClick={() => setIsEditing(false)} className="btn-mini" style={{width:'auto', padding:'0 8px'}}>X</button>
+                </div>
+            ) : (
+                <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
+                    <span style={{fontWeight:'bold', fontSize:'1.1rem'}}>{user.displayName}</span>
+                    <button 
+                        onClick={() => { setIsEditing(true); setNewName(user.displayName); }} 
+                        style={{background:'none', border:'none', cursor:'pointer', color:'#aaa', fontSize:'0.8rem'}}
+                    >
+                        (Edit Name)
+                    </button>
+                </div>
+            )}
         </div>
-        <button onClick={() => signOut(auth)} className="btn-mini" style={{width:'auto', padding:'0 10px'}}>Sign Out</button>
+        <button onClick={() => signOut(auth)} className="btn-mini" style={{width:'auto', padding:'0 10px', background:'#444'}}>Sign Out</button>
       </div>
 
+      {/* JOIN SQUAD */}
       <div className="filters">
         <input 
             placeholder="Enter Squad Code..." 
@@ -53,7 +96,7 @@ export default function SquadTab({ user, squadCode, joinSquad, squadMembers, squ
             return (
                 <div key={m.uid} className="station-card" style={{display:'block'}}>
                     <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'10px', borderBottom:'1px solid #444', paddingBottom:'5px'}}>
-                        {m.photo && <img src={m.photo} style={{width:40, borderRadius:'50%'}} alt="" />}
+                        {m.photo && <img src={m.photo} style={{width:30, borderRadius:'50%'}} alt="" />}
                         <h3 style={{margin:0}}>{m.name}</h3>
                     </div>
                     
