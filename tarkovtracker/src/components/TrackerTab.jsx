@@ -1,28 +1,29 @@
 import React, { useEffect, useState } from 'react';
 import { runQuery } from '../api';
 
-export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevels }) {
+export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevels, completedQuests }) {
   const [items, setItems] = useState({ questMap: {}, hideoutReqs: [] });
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("");
   const [excludeCollector, setExcludeCollector] = useState(true);
 
   useEffect(() => {
-    // UPDATED QUERY: Added 'iconLink'
+    // Query fetches name, icon, types, and counts
     const query = `
     {
       tasks {
+        id
         name
         objectives {
           type
-          ... on TaskObjectiveItem { item { id name iconLink } count }
+          ... on TaskObjectiveItem { item { id name iconLink types } count }
         }
       }
       hideoutStations {
         name
         levels {
           level
-          itemRequirements { item { id name iconLink } count }
+          itemRequirements { item { id name iconLink types } count }
         }
       }
     }`;
@@ -31,13 +32,29 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
       if (!data) return;
       processData(data);
     });
-  }, []);
+  }, [completedQuests]); // Re-run if completedQuests changes
 
   const processData = (data) => {
     const questMap = {}; 
     const hideoutReqs = []; 
 
+    // Helper to determine badge type
+    const getType = (item) => {
+        if (!item.types) return "item";
+        if (item.types.includes("ammo")) return "ammo";
+        if (item.types.includes("weapon")) return "weapon";
+        if (item.types.includes("key")) return "key";
+        if (item.types.includes("barter")) return "barter";
+        if (item.types.includes("container")) return "container";
+        if (item.name.includes("Rouble") || item.name.includes("Dollar") || item.name.includes("Euro")) return "currency";
+        return "item";
+    };
+
+    // 1. Process Quests
     data.tasks.forEach(task => {
+      // --- NEW LOGIC: Skip tasks marked as completed in the Graph ---
+      if (completedQuests.includes(task.id)) return;
+
       const isCollector = task.name === "Collector";
       const taskItems = {}; 
 
@@ -50,7 +67,8 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
             taskItems[id] = { 
                 give: 0, find: 0, plant: 0, 
                 name: obj.item.name, 
-                icon: obj.item.iconLink 
+                icon: obj.item.iconLink,
+                type: getType(obj.item)
             };
           }
           
@@ -66,18 +84,16 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
         
         if (needed > 0) {
           if (!questMap[id]) {
-            questMap[id] = { count: 0, collectorOnly: true, name: t.name, icon: t.icon };
+            questMap[id] = { count: 0, collectorOnly: true, name: t.name, icon: t.icon, type: t.type };
           }
           
-          // BUG FIX: If it's used in a normal quest, mark it NOT collector only
           if (!isCollector) questMap[id].collectorOnly = false;
-          
-          // BUG FIX: Always add the count. We filter visually later.
           questMap[id].count += needed;
         }
       });
     });
 
+    // 2. Process Hideout
     data.hideoutStations.forEach(station => {
       station.levels.forEach(lvl => {
         lvl.itemRequirements.forEach(req => {
@@ -86,6 +102,7 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
               id: req.item.id,
               name: req.item.name,
               icon: req.item.iconLink,
+              type: getType(req.item),
               station: station.name,
               level: lvl.level,
               count: req.count
@@ -109,31 +126,30 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
       updateCount(id, current + delta);
   }
 
-  // --- RENDERING HELPERS ---
+  // --- RENDER LOGIC ---
   if (loading) return <div>Loading Tracker...</div>;
 
   const displayList = [];
   
-  const getEntry = (id, name, icon) => {
+  const getEntry = (id, name, icon, type) => {
     let entry = displayList.find(x => x.id === id);
     if (!entry) {
-      entry = { id, name, icon, quest: 0, hideout: 0 };
+      entry = { id, name, icon, type, quest: 0, hideout: 0 };
       displayList.push(entry);
     }
     return entry;
   };
 
-  // Populate Display List
   Object.keys(items.questMap).forEach(id => {
     const q = items.questMap[id];
     if (excludeCollector && q.collectorOnly) return;
-    getEntry(id, q.name, q.icon).quest += q.count;
+    getEntry(id, q.name, q.icon, q.type).quest += q.count;
   });
 
   items.hideoutReqs.forEach(req => {
     const currentLvl = hideoutLevels[req.station] || 0;
     if (currentLvl < req.level) {
-      getEntry(req.id, req.name, req.icon).hideout += req.count;
+      getEntry(req.id, req.name, req.icon, req.type).hideout += req.count;
     }
   });
 
@@ -143,15 +159,12 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
     .filter(x => x.name.toLowerCase().includes(filter.toLowerCase()))
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  // SPLIT INTO TWO LISTS
+  // Split Lists
   const hideoutItems = allNeededItems.filter(i => i.hideout > 0);
   const questItems = allNeededItems.filter(i => i.quest > 0);
 
   const renderRow = (item, typeNeeded) => {
-    const totalNeeded = item.quest + item.hideout; // User wants global logic?
-    // Actually, usually users want to know if they have enough for THAT specific section
-    // But since inventory is shared, we should probably stick to (Have X / Total Needed Y)
-    
+    const totalNeeded = item.quest + item.hideout;
     const userHas = itemProgress[item.id] || 0;
     
     let statusClass = "needed";
@@ -164,12 +177,14 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
             {item.icon && <img src={item.icon} alt="" className="item-icon" />}
         </div>
         <div className="col-name">
+           {/* BADGE */}
+           <span className={`type-badge badge-${item.type}`}>
+                {item.type.toUpperCase()}
+           </span>
           {item.name}
         </div>
         
         <div className="col-breakdown">
-            {/* Only show relevant text for this table context if desired, 
-                but showing total breakdown helps decision making */}
             {typeNeeded === 'hideout' && `Hideout: ${item.hideout}`}
             {typeNeeded === 'quest' && `Quest: ${item.quest}`}
         </div>
@@ -209,7 +224,6 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
         </label>
       </div>
 
-      {/* HIDEOUT TABLE */}
       {hideoutItems.length > 0 && (
           <>
             <h3 className="section-title">Hideout Requirements</h3>
@@ -219,7 +233,6 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
           </>
       )}
 
-      {/* QUEST TABLE */}
       {questItems.length > 0 && (
           <>
             <h3 className="section-title">Quest Requirements</h3>
@@ -231,7 +244,7 @@ export default function TrackerTab({ itemProgress, setItemProgress, hideoutLevel
       
       {hideoutItems.length === 0 && questItems.length === 0 && (
           <div style={{textAlign: 'center', padding: '20px', color: '#666'}}>
-              No items found.
+              No items needed (or all filtered out).
           </div>
       )}
     </div>

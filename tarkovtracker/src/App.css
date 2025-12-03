@@ -195,3 +195,50 @@ input[type="text"], input[type="number"], select {
 }
 
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+
+/* --- React Flow Graph Nodes --- */
+.quest-node {
+  padding: 10px;
+  border-radius: 4px;
+  background: var(--card-bg);
+  border: 1px solid #444;
+  color: #eee;
+  text-align: center;
+  width: 160px;
+  font-size: 0.8rem;
+  transition: all 0.2s;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+}
+
+.quest-node:hover {
+  border-color: var(--accent-color);
+  transform: scale(1.05);
+  cursor: pointer;
+}
+
+.quest-node.completed {
+  background: rgba(27, 94, 32, 0.8);
+  border-color: var(--success-bg);
+}
+
+.quest-title {
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.quest-req {
+  font-size: 0.7rem;
+  color: #ffcc80; /* Orange for requirements */
+  margin-bottom: 4px;
+}
+
+.quest-status {
+  font-size: 0.65rem;
+  color: #aaa;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.quest-node.completed .quest-status {
+  color: #fff;
+}
