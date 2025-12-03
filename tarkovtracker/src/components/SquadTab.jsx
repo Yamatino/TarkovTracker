@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { auth, googleProvider, db } from '../firebaseConfig';
-// ADDED: Email Auth imports
 import { 
     signInWithPopup, 
     signOut, 
@@ -8,7 +7,7 @@ import {
     createUserWithEmailAndPassword, 
     signInWithEmailAndPassword 
 } from 'firebase/auth';
-import { doc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 
 const GENERAL_SQUAD_ID = "general-lobby";
 
@@ -17,16 +16,17 @@ export default function SquadTab({ user, squadCode, joinSquad, squadMembers, squ
   const [newName, setNewName] = useState("");
   const [isEditing, setIsEditing] = useState(false);
 
-  // --- NEW: LOGIN STATE ---
-  const [authMode, setAuthMode] = useState("google"); // 'google' or 'email'
+  // Login State
+  const [authMode, setAuthMode] = useState("google");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
-  const [isRegistering, setIsRegistering] = useState(false); // Toggle Login vs Register
+  const [isRegistering, setIsRegistering] = useState(false);
 
   const handleUpdateName = async () => {
     if (!newName.trim() || !user) return;
     await updateProfile(user, { displayName: newName });
+    
     if (squadCode && squadCode !== GENERAL_SQUAD_ID) {
         const memberRef = doc(db, 'squads', squadCode, 'members', user.uid);
         await setDoc(memberRef, { name: newName }, { merge: true });
@@ -40,14 +40,12 @@ export default function SquadTab({ user, squadCode, joinSquad, squadMembers, squ
       setInputCode("");
   };
 
-  // --- NEW: EMAIL AUTH LOGIC ---
   const handleEmailAuth = async (e) => {
       e.preventDefault();
       setAuthError("");
       try {
           if (isRegistering) {
               const res = await createUserWithEmailAndPassword(auth, email, password);
-              // Set a default display name for new users
               await updateProfile(res.user, { displayName: email.split('@')[0] });
           } else {
               await signInWithEmailAndPassword(auth, email, password);
@@ -57,54 +55,84 @@ export default function SquadTab({ user, squadCode, joinSquad, squadMembers, squ
       }
   };
 
-  // --- 1. LOGGED OUT VIEW (LOGIN FORM) ---
+  // --- LOGGED OUT ---
   if (!user) {
     return (
         <div className="tab-content" style={{textAlign:'center', marginTop:'50px', maxWidth:'400px', margin:'50px auto'}}>
-            <h2 style={{color:'var(--accent-color)'}}>Tarkov Tracker Sync</h2>
+            <h2 style={{color:'var(--accent-color)', marginBottom: '30px'}}>Tarkov Tracker Sync</h2>
             
-            {/* Auth Switcher */}
-            <div style={{display:'flex', justifyContent:'center', gap:'10px', marginBottom:'20px'}}>
+            {/* STYLED TABS */}
+            <div style={{
+                display:'flex', marginBottom:'20px', borderBottom: '2px solid #333'
+            }}>
                 <button 
                     onClick={() => setAuthMode('google')}
-                    className={authMode === 'google' ? 'btn-mini' : ''}
-                    style={{padding:'8px 16px', background: authMode === 'google' ? '#444' : 'transparent', border:'1px solid #555'}}
+                    style={{
+                        flex: 1,
+                        padding: '10px',
+                        background: 'transparent',
+                        border: 'none',
+                        borderBottom: authMode === 'google' ? '3px solid var(--accent-color)' : 'none',
+                        color: authMode === 'google' ? '#fff' : '#666',
+                        fontWeight: 'bold',
+                        cursor: 'pointer'
+                    }}
                 >Google</button>
                 <button 
                     onClick={() => setAuthMode('email')}
-                    className={authMode === 'email' ? 'btn-mini' : ''}
-                    style={{padding:'8px 16px', background: authMode === 'email' ? '#444' : 'transparent', border:'1px solid #555'}}
-                >Email / Hotmail</button>
+                    style={{
+                        flex: 1,
+                        padding: '10px',
+                        background: 'transparent',
+                        border: 'none',
+                        borderBottom: authMode === 'email' ? '3px solid var(--accent-color)' : 'none',
+                        color: authMode === 'email' ? '#fff' : '#666',
+                        fontWeight: 'bold',
+                        cursor: 'pointer'
+                    }}
+                >Email / Password</button>
             </div>
 
             {authMode === 'google' ? (
-                <button 
-                    onClick={() => signInWithPopup(auth, googleProvider)}
-                    style={{padding:'12px 24px', fontSize:'1.1rem', cursor:'pointer', background:'#fff', color:'#000', border:'none', borderRadius:'4px', fontWeight:'bold'}}
-                >
-                    <span style={{marginRight:'10px'}}>G</span> Sign in with Google
-                </button>
+                <div style={{padding: '20px 0'}}>
+                     <button 
+                        onClick={() => signInWithPopup(auth, googleProvider)}
+                        style={{
+                            padding:'12px 24px', fontSize:'1.1rem', cursor:'pointer', 
+                            background:'#fff', color:'#000', border:'none', borderRadius:'4px', fontWeight:'bold',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', width: '100%'
+                        }}
+                    >
+                        <img src="https://www.google.com/favicon.ico" width="20" alt="" />
+                        Sign in with Google
+                    </button>
+                </div>
             ) : (
-                <form onSubmit={handleEmailAuth} style={{display:'flex', flexDirection:'column', gap:'10px', textAlign:'left'}}>
-                    <input 
-                        type="email" 
-                        placeholder="Email (Hotmail, Yahoo, etc.)" 
-                        value={email} 
-                        onChange={e => setEmail(e.target.value)}
-                        required
-                        style={{width:'100%'}}
-                    />
-                    <input 
-                        type="password" 
-                        placeholder="Password" 
-                        value={password} 
-                        onChange={e => setPassword(e.target.value)}
-                        required
-                        style={{width:'100%'}}
-                    />
-                    {authError && <div style={{color:'#ff8a80', fontSize:'0.9em'}}>{authError}</div>}
+                <form onSubmit={handleEmailAuth} style={{display:'flex', flexDirection:'column', gap:'15px', textAlign:'left'}}>
+                    <div>
+                        <label style={{display:'block', fontSize:'0.8em', marginBottom:'5px', color:'#aaa'}}>Email</label>
+                        <input 
+                            type="email" 
+                            value={email} 
+                            onChange={e => setEmail(e.target.value)}
+                            required
+                            style={{width:'100%', padding: '10px', background: '#222', border: '1px solid #444', color: '#fff'}}
+                        />
+                    </div>
+                    <div>
+                        <label style={{display:'block', fontSize:'0.8em', marginBottom:'5px', color:'#aaa'}}>Password</label>
+                        <input 
+                            type="password" 
+                            value={password} 
+                            onChange={e => setPassword(e.target.value)}
+                            required
+                            style={{width:'100%', padding: '10px', background: '#222', border: '1px solid #444', color: '#fff'}}
+                        />
+                    </div>
+
+                    {authError && <div style={{color:'#ff5252', fontSize:'0.9em', background: 'rgba(255, 82, 82, 0.1)', padding: '10px', borderRadius: '4px'}}>{authError}</div>}
                     
-                    <button type="submit" style={{padding:'10px', background:'var(--accent-color)', color:'white', border:'none', borderRadius:'4px', cursor:'pointer', fontWeight:'bold'}}>
+                    <button type="submit" style={{padding:'12px', background:'var(--accent-color)', color:'white', border:'none', borderRadius:'4px', cursor:'pointer', fontWeight:'bold', fontSize: '1rem', marginTop: '10px'}}>
                         {isRegistering ? "Create Account" : "Log In"}
                     </button>
                     
@@ -123,7 +151,7 @@ export default function SquadTab({ user, squadCode, joinSquad, squadMembers, squ
     );
   }
 
-  // --- 2. LOGGED IN VIEW (SQUAD DASHBOARD) ---
+  // --- LOGGED IN ---
   const isGeneral = squadCode === GENERAL_SQUAD_ID;
 
   return (
