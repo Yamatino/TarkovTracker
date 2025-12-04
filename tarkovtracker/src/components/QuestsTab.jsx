@@ -9,21 +9,54 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import dagre from 'dagre';
-import { runQuery } from '../api';
 
 const TRADERS = ["Prapor", "Therapist", "Skier", "Peacekeeper", "Mechanic", "Ragman", "Jaeger", "Fence"];
 
+// --- CUSTOM NODE COMPONENT ---
 const QuestNode = ({ data }) => {
-  const isExternal = data.isExternal; 
+  const isExternal = data.isExternal;
   
+  // Handle Right Click -> Open Wiki
+  const onRightClick = (e) => {
+      e.preventDefault();
+      if (data.wikiLink) {
+          window.open(data.wikiLink, '_blank');
+      }
+  };
+
   return (
-    <div className={`quest-node ${data.isCompleted ? 'completed' : ''} ${isExternal ? 'external' : ''}`}>
+    <div 
+        className={`quest-node ${data.isCompleted ? 'completed' : ''} ${isExternal ? 'external' : ''}`}
+        onContextMenu={onRightClick} // Right click handler
+        title="Right-click for Wiki"
+    >
       <Handle type="target" position={Position.Top} style={{ background: '#555', visibility: 'hidden' }} />
       
+      {/* KAPPA BADGE */}
+      {data.kappaRequired && (
+          <div style={{
+              position: 'absolute',
+              top: '-8px',
+              right: '-8px',
+              width: '20px',
+              height: '20px',
+              background: '#9c27b0', // Purple
+              color: 'white',
+              borderRadius: '50%',
+              fontSize: '12px',
+              fontWeight: 'bold',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '2px solid #121212',
+              zIndex: 10
+          }}>
+              K
+          </div>
+      )}
+
       <div className="quest-title">{data.label}</div>
       {isExternal && <div className="quest-trader">({data.trader})</div>}
-      
-      {/* ALWAYS show requirement if it exists */}
       {data.reqText && <div className="quest-req">{data.reqText}</div>}
       
       {!isExternal && (
@@ -39,14 +72,13 @@ const QuestNode = ({ data }) => {
 
 const nodeTypes = { quest: QuestNode };
 
+// Layout Algorithm (Same as before)
 const getLayoutedElements = (nodes, edges) => {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
-
   dagreGraph.setGraph({ rankdir: 'TB', ranksep: 100, nodesep: 60 });
 
   nodes.forEach((node) => {
-    // Dynamic height based on content (approximate)
     const h = node.data.isExternal ? 70 : 100;
     dagreGraph.setNode(node.id, { width: 180, height: h });
   });
@@ -71,64 +103,41 @@ const getLayoutedElements = (nodes, edges) => {
   return { nodes: layoutedNodes, edges };
 };
 
-export default function QuestsTab({ completedQuests, setCompletedQuests }) {
+export default function QuestsTab({ globalData, completedQuests, setCompletedQuests }) {
   const [selectedTrader, setSelectedTrader] = useState("Prapor");
-  const [rawTasks, setRawTasks] = useState([]);
-  const [loading, setLoading] = useState(true);
   
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
+  // Build Graph from Global Data
   useEffect(() => {
-    const query = `
-    {
-      tasks {
-        id
-        name
-        minPlayerLevel
-        trader { name }
-        taskRequirements {
-          task { id }
-        }
-      }
-    }`;
-    runQuery(query).then(data => {
-      if (data) {
-        setRawTasks(data.tasks);
-        setLoading(false);
-      }
-    });
-  }, []);
-
-  useEffect(() => {
-    if (rawTasks.length === 0) return;
-
+    if (!globalData || !globalData.tasks) return;
+    
+    const rawTasks = globalData.tasks;
     const taskMap = new Map(rawTasks.map(t => [t.id, t]));
     const primaryTasks = rawTasks.filter(t => t.trader.name === selectedTrader);
+    
     const nodesToRender = new Map();
-
     primaryTasks.forEach(t => nodesToRender.set(t.id, { task: t, isPrimary: true }));
 
+    // Find parents
     primaryTasks.forEach(task => {
-        task.taskRequirements.forEach(req => {
-            const parentId = req.task.id;
-            if (!nodesToRender.has(parentId) && taskMap.has(parentId)) {
-                nodesToRender.set(parentId, { task: taskMap.get(parentId), isPrimary: false });
-            }
-        });
+        if(task.taskRequirements) {
+            task.taskRequirements.forEach(req => {
+                const parentId = req.task.id;
+                if (!nodesToRender.has(parentId) && taskMap.has(parentId)) {
+                    nodesToRender.set(parentId, { task: taskMap.get(parentId), isPrimary: false });
+                }
+            });
+        }
     });
 
     const newNodes = [];
     const newEdges = [];
 
     nodesToRender.forEach(({ task, isPrimary }, id) => {
-        // --- UPDATED LOGIC ---
-        // We now show the level requirement for ANY task > level 1
-        // regardless of whether it has parents or not.
         let reqText = "";
-        if (task.minPlayerLevel > 1) {
-            reqText = `Req: Lvl ${task.minPlayerLevel}`;
-        }
+        if (task.minPlayerLevel > 1) reqText = `Req: Lvl ${task.minPlayerLevel}`;
 
         newNodes.push({
             id: task.id,
@@ -138,32 +147,37 @@ export default function QuestsTab({ completedQuests, setCompletedQuests }) {
                 trader: task.trader.name,
                 reqText: reqText,
                 isCompleted: completedQuests.includes(task.id),
-                isExternal: !isPrimary 
+                isExternal: !isPrimary,
+                // PASS NEW PROPS
+                kappaRequired: task.kappaRequired, 
+                wikiLink: task.wikiLink
             },
             position: { x: 0, y: 0 }
         });
     });
 
     nodesToRender.forEach(({ task, isPrimary }, id) => {
-        task.taskRequirements.forEach(req => {
-            const parentId = req.task.id;
-            if (nodesToRender.has(parentId)) {
-                 newEdges.push({
-                    id: `e${parentId}-${task.id}`,
-                    source: parentId,
-                    target: task.id,
-                    type: 'smoothstep',
-                    style: { stroke: isPrimary ? '#888' : '#555', strokeWidth: 2 }
-                });
-            }
-        });
+        if(task.taskRequirements) {
+            task.taskRequirements.forEach(req => {
+                const parentId = req.task.id;
+                if (nodesToRender.has(parentId)) {
+                     newEdges.push({
+                        id: `e${parentId}-${task.id}`,
+                        source: parentId,
+                        target: task.id,
+                        type: 'smoothstep',
+                        style: { stroke: isPrimary ? '#888' : '#555', strokeWidth: 2 }
+                    });
+                }
+            });
+        }
     });
 
     const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(newNodes, newEdges);
     setNodes(layoutedNodes);
     setEdges(layoutedEdges);
 
-  }, [rawTasks, selectedTrader, completedQuests, setNodes, setEdges]);
+  }, [globalData, selectedTrader, completedQuests, setNodes, setEdges]);
 
   const onNodeClick = useCallback((event, node) => {
     if (node.data.isExternal) {
@@ -181,8 +195,6 @@ export default function QuestsTab({ completedQuests, setCompletedQuests }) {
     setCompletedQuests(newCompleted);
   }, [completedQuests, setCompletedQuests]);
 
-  if (loading) return <div>Loading Quests...</div>;
-
   return (
     <div className="tab-content" style={{height: '80vh'}}>
       <div className="filters">
@@ -191,7 +203,7 @@ export default function QuestsTab({ completedQuests, setCompletedQuests }) {
             {TRADERS.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
         <span style={{marginLeft: 'auto', fontSize: '0.8em', color: '#888'}}>
-            Ghost nodes are requirements from other traders.
+            Right-click a quest to open Wiki.
         </span>
       </div>
 

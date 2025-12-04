@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { runQuery } from '../api';
 
-// Bump to v12 to clean the cache
-const CACHE_KEY = 'tarkov_global_cache_v12';
+// Bump cache version to v14 to force a re-download with new fields
+const CACHE_KEY = 'tarkov_global_cache_v14';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; 
 
 export function useGlobalData() {
@@ -23,9 +23,7 @@ export function useGlobalData() {
                             setLoading(false);
                             return;
                         }
-                    } catch(e) {
-                        console.warn("Cache corrupt, reloading.");
-                    }
+                    } catch(e) { console.warn("Cache corrupt, reloading."); }
                 }
 
                 // 2. Fetch API Data
@@ -38,7 +36,13 @@ export function useGlobalData() {
                         sellFor { price currency vendor { name } }
                     }
                     tasks {
-                        id name trader { name }
+                        id 
+                        name 
+                        kappaRequired   # <--- NEW FIELD
+                        wikiLink        # <--- NEW FIELD
+                        trader { name }
+                        minPlayerLevel
+                        taskRequirements { task { id } }
                         objectives { type ... on TaskObjectiveItem { count foundInRaid item { id } } }
                     }
                     hideoutStations {
@@ -50,26 +54,15 @@ export function useGlobalData() {
                 const apiData = await runQuery(apiQuery);
                 if (!apiData || !apiData.items) throw new Error("API fetch failed");
 
-                // 3. Process Data
                 setStatus("Processing Items...");
+                
+                // ... (Keep the rest of the processing logic exactly the same) ...
                 const itemMap = {};
                 const keysList = [];
 
                 apiData.items.forEach(i => {
                     itemMap[i.id] = { ...i, questDetails: [], hideoutDetails: [] };
-                    
-                    // --- STRICTER KEY FILTER ---
-                    const nameLower = i.name.toLowerCase();
-                    
-                    // 1. Must have "key" in name or type
-                    const looksLikeKey = (i.types?.includes('keys') || i.types?.includes('key') || nameLower.includes('key'));
-                    
-                    // 2. Must NOT be a weapon part or barter item (unless it's a marked key barter)
-                    const isWeaponPart = i.types?.includes('modification') || i.types?.includes('preset');
-                    const isFalsePositive = nameLower.includes('keymod') || nameLower.includes('keyslot') || nameLower.includes('keymount');
-                    const isTrash = i.types?.includes('barter') && !nameLower.includes('key'); // Only allow barter if it explicitly says key
-
-                    if (looksLikeKey && !isWeaponPart && !isFalsePositive && !isTrash) {
+                    if ((i.types?.includes('key') || i.name.toLowerCase().includes('key')) && !i.types?.includes('barter')) {
                         keysList.push(i);
                     }
                 });
@@ -124,9 +117,7 @@ export function useGlobalData() {
 
                 try {
                     localStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data: globalData }));
-                } catch (e) {
-                    console.warn("Quota exceeded.");
-                }
+                } catch (e) { console.warn("Quota exceeded."); }
 
                 setData(globalData);
                 setLoading(false);
