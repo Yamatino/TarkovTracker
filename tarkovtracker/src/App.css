@@ -20,10 +20,12 @@ body {
   color: var(--text-primary);
   font-family: 'Segoe UI', sans-serif;
   margin: 0;
+  overflow-y: scroll; /* Always show scrollbar to prevent layout shift */
 }
 
 .app-container {
-  max-width: 900px;
+  /* CHANGED: Increased width to fit more tabs */
+  max-width: 1200px; 
   margin: 0 auto;
   min-height: 100vh;
   background: var(--bg-color);
@@ -36,26 +38,47 @@ header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  /* CHANGED: Force single line, scroll if screen is too small */
+  flex-wrap: nowrap; 
+  overflow-x: auto;
+  gap: 20px;
 }
 
-header h1 { margin: 0; font-size: 1.2rem; color: var(--text-primary); }
+/* Fix Title Wrapping */
+.app-title {
+  margin: 0;
+  font-size: 1.2rem;
+  color: var(--text-primary);
+  white-space: nowrap; /* Don't break text */
+}
+
+nav {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  /* CHANGED: Don't let the nav shrink/crush */
+  flex-shrink: 0; 
+}
 
 nav button {
   background: transparent;
   border: 1px solid transparent;
   color: var(--text-secondary);
-  padding: 8px 16px;
+  padding: 8px 12px;
   cursor: pointer;
   font-weight: bold;
   transition: all 0.2s;
+  white-space: nowrap; /* Keep button text on one line */
+  font-size: 0.9rem;
+  border-radius: 4px;
 }
 
-nav button:hover { color: var(--text-primary); }
+nav button:hover { color: var(--text-primary); background: rgba(255,255,255,0.05); }
+
 nav button.active {
   background: var(--card-bg);
   color: var(--accent-color);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
 }
 
 main { padding: 20px; }
@@ -80,9 +103,10 @@ main { padding: 20px; }
   border-radius: 8px;
   border: 1px solid var(--border-color);
   align-items: center;
+  flex-wrap: wrap;
 }
 
-input[type="text"], input[type="number"], select {
+input[type="text"], input[type="number"], input[type="email"], input[type="password"], select {
   background: var(--input-bg);
   border: 1px solid var(--border-color);
   color: white;
@@ -99,220 +123,56 @@ input[type="text"], input[type="number"], select {
   padding: 10px;
   margin-bottom: 1px;
 }
-
 .item-row:hover { background-color: #2a2a2a; }
-
-.item-row.collected {
-  background-color: rgba(27, 94, 32, 0.2); 
-  border-left: 4px solid var(--success-bg);
-}
-
-.item-row.partial {
-  background-color: rgba(255, 143, 0, 0.1);
-  border-left: 4px solid #ff8f00;
-}
+.item-row.collected { background-color: rgba(27, 94, 32, 0.2); border-left: 4px solid var(--success-bg); }
+.item-row.partial { background-color: rgba(255, 143, 0, 0.1); border-left: 4px solid #ff8f00; }
 
 .col-img { width: 50px; display: flex; justify-content: center; }
 .item-icon { width: 40px; height: 40px; object-fit: contain; }
-
 .col-name { flex: 2; font-weight: bold; display: flex; flex-direction: column; justify-content: center; padding-left: 10px; }
 .col-breakdown { flex: 2; font-size: 0.9em; color: var(--text-secondary); display: flex; align-items: center;}
 
-/* Controls */
-.col-controls {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  width: 160px;
-  justify-content: flex-end;
-}
+.col-controls { display: flex; align-items: center; gap: 5px; width: 160px; justify-content: flex-end; }
 
-.btn-mini {
-  background: #333;
-  color: white;
-  border: 1px solid #555;
-  width: 28px;
-  height: 28px;
-  border-radius: 4px;
-  cursor: pointer;
-}
+.btn-mini { background: #333; color: white; border: 1px solid #555; width: 28px; height: 28px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center;}
 .btn-mini:hover { background: #444; }
-
-.count-input {
-  width: 50px;
-  text-align: center;
-  font-weight: bold;
-  background: #111;
-  border: 1px solid #444;
-}
-
+.count-input { width: 50px; text-align: center; font-weight: bold; background: #111; border: 1px solid #444; }
 .count-total { color: var(--text-secondary); font-size: 0.9em; min-width: 30px;}
 
 /* Search Cards */
-.result-card {
-  background: var(--card-bg);
-  border: 1px solid var(--border-color);
-  padding: 15px;
-  margin-bottom: 15px;
-  border-radius: 8px;
-}
-.needed-alert {
-  background: rgba(183, 28, 28, 0.2);
-  color: #ff8a80;
-  padding: 10px;
-  border: 1px solid #b71c1c;
-  border-radius: 4px;
-  margin: 10px 0;
-}
-.status-complete {
-  background: rgba(27, 94, 32, 0.2);
-  color: #a5d6a7;
-  padding: 10px;
-  border: 1px solid #1b5e20;
-  border-radius: 4px;
-  margin: 10px 0;
-}
-.prices {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 15px;
-  padding-top: 15px;
-  border-top: 1px dashed #444;
-}
+.result-card { background: var(--card-bg); border: 1px solid var(--border-color); padding: 15px; margin-bottom: 15px; border-radius: 8px; }
+.needed-alert { background: rgba(183, 28, 28, 0.2); color: #ff8a80; padding: 10px; border: 1px solid #b71c1c; border-radius: 4px; margin: 10px 0; }
+.status-complete { background: rgba(27, 94, 32, 0.2); color: #a5d6a7; padding: 10px; border: 1px solid #1b5e20; border-radius: 4px; margin: 10px 0; }
+.not-needed { color: #757575; font-style: italic; margin: 10px 0; }
+
+.prices { display: flex; justify-content: space-between; margin-top: 15px; padding-top: 15px; border-top: 1px dashed #444; }
 .profit { color: #69f0ae; font-weight: bold; }
 .loss { color: #ff8a80; }
 
 /* Hideout Grid */
-.station-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.station-card {
-  background: var(--card-bg);
-  border: 1px solid var(--border-color);
-  padding: 15px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-radius: 8px;
-}
+.station-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.station-card { background: var(--card-bg); border: 1px solid var(--border-color); padding: 15px; display: flex; justify-content: space-between; align-items: center; border-radius: 8px; }
 
+/* Badges */
+.type-badge { font-size: 0.7em; padding: 2px 6px; border-radius: 4px; margin-right: 8px; color: white; font-weight: bold; text-shadow: 0 1px 1px rgba(0,0,0,0.2); display: inline-block; width: 60px; text-align: center; }
+.badge-item { background-color: #9e9e9e; }
+.badge-weapon { background-color: #d32f2f; }
+.badge-ammo { background-color: #f57c00; }
+.badge-barter { background-color: #1976d2; }
+.badge-key { background-color: #fbc02d; color: #333; text-shadow: none; }
+.badge-container { background-color: #7b1fa2; }
+.badge-currency { background-color: #388e3c; }
+
+/* Graph Nodes */
+.quest-node { padding: 10px; border-radius: 4px; background: var(--card-bg); border: 1px solid #444; color: #eee; text-align: center; width: 160px; font-size: 0.8rem; transition: all 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.3); position: relative; }
+.quest-node:hover { border-color: var(--accent-color); transform: scale(1.02); cursor: pointer; z-index: 10; }
+.quest-node.completed { background: rgba(27, 94, 32, 0.6); border-color: var(--success-bg); }
+.quest-node.external { background: #111; border: 1px dashed #555; color: #777; opacity: 0.8; }
+.quest-title { font-weight: bold; margin-bottom: 2px; }
+.quest-trader { font-size: 0.7em; font-style: italic; color: #888; margin-bottom: 4px; }
+.quest-req { font-size: 0.7rem; color: #ffcc80; margin-top: 4px; }
+.quest-status { margin-top: 5px; font-size: 0.65rem; color: #aaa; text-transform: uppercase; letter-spacing: 1px; border-top: 1px solid #333; padding-top: 2px; }
+
+/* Remove arrow keys from number input */
+input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
-
-/* --- React Flow Graph Nodes --- */
-.quest-node {
-  padding: 10px;
-  border-radius: 4px;
-  background: var(--card-bg);
-  border: 1px solid #444;
-  color: #eee;
-  text-align: center;
-  width: 160px;
-  font-size: 0.8rem;
-  transition: all 0.2s;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-}
-
-.quest-node:hover {
-  border-color: var(--accent-color);
-  transform: scale(1.05);
-  cursor: pointer;
-}
-
-.quest-node.completed {
-  background: rgba(27, 94, 32, 0.8);
-  border-color: var(--success-bg);
-}
-
-.quest-title {
-  font-weight: bold;
-  margin-bottom: 4px;
-}
-
-.quest-req {
-  font-size: 0.7rem;
-  color: #ffcc80; /* Orange for requirements */
-  margin-bottom: 4px;
-}
-
-.quest-status {
-  font-size: 0.65rem;
-  color: #aaa;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-.quest-node.completed .quest-status {
-  color: #fff;
-}
-
-/* src/App.css - Add this to the end */
-
-.quest-node {
-  padding: 10px;
-  border-radius: 4px;
-  background: var(--card-bg);
-  border: 1px solid #444;
-  color: #eee;
-  text-align: center;
-  width: 170px;
-  font-size: 0.8rem;
-  transition: all 0.2s;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-  position: relative;
-}
-
-.quest-node:hover {
-  border-color: var(--accent-color);
-  transform: scale(1.02);
-  cursor: pointer;
-  z-index: 10;
-}
-
-.quest-node.completed {
-  background: rgba(27, 94, 32, 0.6);
-  border-color: var(--success-bg);
-}
-
-/* --- EXTERNAL (GHOST) NODES --- */
-.quest-node.external {
-  background: #111;
-  border: 1px dashed #555;
-  color: #777;
-  opacity: 0.8;
-}
-.quest-node.external:hover {
-    border-color: #777;
-    cursor: help;
-}
-
-.quest-title {
-  font-weight: bold;
-  margin-bottom: 2px;
-}
-
-.quest-trader {
-    font-size: 0.7em;
-    font-style: italic;
-    color: #888;
-    margin-bottom: 4px;
-}
-
-.quest-req {
-  font-size: 0.7rem;
-  color: #ffcc80; 
-  margin-top: 4px;
-}
-
-.quest-status {
-  margin-top: 5px;
-  font-size: 0.65rem;
-  color: #aaa;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  border-top: 1px solid #333;
-  padding-top: 2px;
-}
-.quest-node.completed .quest-status {
-  color: #fff;
-  border-top-color: rgba(255,255,255,0.2);
-}
-
-
