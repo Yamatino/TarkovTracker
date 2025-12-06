@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { runQuery } from '../api';
 
-// Bump to v17 to force fresh download with new Key data
-const CACHE_KEY = 'tarkov_global_cache_v17';
+// Bump to v18 to force a clean reload of the logic
+const CACHE_KEY = 'tarkov_global_cache_v18';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; 
 
 export function useGlobalData() {
@@ -13,7 +13,6 @@ export function useGlobalData() {
     useEffect(() => {
         const load = async () => {
             try {
-                // 1. Check Cache
                 const cached = localStorage.getItem(CACHE_KEY);
                 if (cached) {
                     try {
@@ -23,38 +22,23 @@ export function useGlobalData() {
                             setLoading(false);
                             return;
                         }
-                    } catch(e) { console.warn("Cache corrupt, reloading."); }
+                    } catch(e) { console.warn("Cache corrupt"); }
                 }
 
-                // 2. Fetch API Data
-                setStatus("Fetching Tarkov.dev Database...");
+                setStatus("Fetching Tarkov Database...");
                 
                 const apiQuery = `
                 {
-                    items(limit: 4500) { 
+                    items(limit: 4800) { 
                         id name shortName iconLink wikiLink types avg24hPrice 
                         sellFor { price currency vendor { name } }
-                        # NEW: Fetch tasks this item is used in (covers Keys!)
-                        usedInTasks {
-                            id
-                            name
-                            trader { name }
-                            map { id }
-                        }
+                        usedInTasks { id name trader { name } map { id } } 
                     }
                     tasks {
-                        id 
-                        name 
-                        trader { name }
-                        map { id }
-                        minPlayerLevel
-                        kappaRequired
-                        wikiLink
+                        id name trader { name } map { id }
+                        minPlayerLevel kappaRequired wikiLink
                         taskRequirements { task { id } }
-                        objectives { 
-                            type 
-                            ... on TaskObjectiveItem { count foundInRaid item { id } } 
-                        }
+                        objectives { type ... on TaskObjectiveItem { count foundInRaid item { id } } }
                     }
                     hideoutStations {
                         name imageLink
@@ -69,42 +53,50 @@ export function useGlobalData() {
                 const itemMap = {};
                 const keysList = [];
 
-                // Initialize Items & Process "Used In Tasks" (Keys)
+                // 1. Init Items & Keys List
                 apiData.items.forEach(i => {
                     itemMap[i.id] = { ...i, questDetails: [], hideoutDetails: [] };
                     
-                    // A. KEY FILTERING LIST (for Keyring Tab)
-                    const nameLower = i.name.toLowerCase();
-                    const looksLikeKey = (i.types?.includes('keys') || i.types?.includes('key') || nameLower.includes('key'));
-                    const isWeaponPart = i.types?.includes('modification') || i.types?.includes('preset');
-                    const isFalsePositive = nameLower.includes('keymod') || nameLower.includes('keyslot') || nameLower.includes('keymount');
-                    const isTrash = i.types?.includes('barter') && !nameLower.includes('key');
+                    const n = i.name.toLowerCase();
+                    const t = i.types || [];
+                    const isKey = (t.includes('keys') || t.includes('key') || n.includes('key')) 
+                                  && !t.includes('modification') 
+                                  && !t.includes('preset') 
+                                  && !n.includes('keymod') 
+                                  && !n.includes('keyslot')
+                                  && (!t.includes('barter') || n.includes('key'));
 
-                    if (looksLikeKey && !isWeaponPart && !isFalsePositive && !isTrash) {
-                        keysList.push(i);
-                    }
-
-                    // B. PROCESS "USED IN TASKS" (This catches Keys!)
-                    if (i.usedInTasks && i.usedInTasks.length > 0) {
-                        i.usedInTasks.forEach(task => {
-                            // We use a count of 1 for keys/tools
-                            itemMap[i.id].questDetails.push({
-                                id: task.id,
-                                name: task.name,
-                                trader: task.trader?.name || "?",
-                                count: 1, 
-                                fir: false, // Keys usually don't need to be FIR for access
-                                isKey: true // Flag for UI differentiation if needed
-                            });
-                        });
-                    }
+                    if (isKey) keysList.push(i);
                 });
                 
                 keysList.sort((a, b) => a.name.localeCompare(b.name));
 
-                // Process Direct Objectives (Find/Handover)
+                // 2. Process Quest Requirements (Merge "UsedIn" and "Objectives")
+                
+                // A. "Used In Tasks" (Keys/Tools)
+                apiData.items.forEach(i => {
+                    if (i.usedInTasks) {
+                        i.usedInTasks.forEach(t => {
+                            // Prevent duplicates later
+                            const existing = itemMap[i.id].questDetails.find(q => q.id === t.id);
+                            if (!existing) {
+                                itemMap[i.id].questDetails.push({
+                                    id: t.id,
+                                    name: t.name,
+                                    trader: t.trader?.name || "?",
+                                    count: 1, // Keys usually count as 1
+                                    fir: false,
+                                    isKey: true
+                                });
+                            }
+                        });
+                    }
+                });
+
+                // B. "Objectives" (Find/Handover)
                 apiData.tasks.forEach(task => {
                     const taskItems = {};
+                    
                     task.objectives.forEach(obj => {
                         if (obj.item && itemMap[obj.item.id]) {
                             const iid = obj.item.id;
@@ -116,34 +108,35 @@ export function useGlobalData() {
                             if (obj.foundInRaid) taskItems[iid].fir = true;
                         }
                     });
-                    
+
                     Object.keys(taskItems).forEach(iid => {
                         const t = taskItems[iid];
                         const count = Math.max(t.give, t.find) + t.plant;
                         
-                        // Only add if we haven't already added this task via "usedInTasks"
-                        // (Avoids duplicates if an item is both a key AND a handover)
-                        const existing = itemMap[iid].questDetails.find(q => q.id === task.id);
-                        
                         if (count > 0) {
-                            if (existing) {
-                                // Update existing entry (Handover is more specific than generic usage)
-                                existing.count = count;
-                                existing.fir = t.fir;
+                            const existingIndex = itemMap[iid].questDetails.findIndex(q => q.id === task.id);
+                            
+                            if (existingIndex > -1) {
+                                // If it exists (e.g. was added as a Key), update it with objective info
+                                // Prioritize the Objective count if it's higher (e.g. need 2 keys?)
+                                // Usually keys are 1, but if it's a handover, we update status
+                                const ex = itemMap[iid].questDetails[existingIndex];
+                                ex.count = Math.max(ex.count, count);
+                                if (t.fir) ex.fir = true;
                             } else {
                                 itemMap[iid].questDetails.push({
-                                    id: task.id, 
-                                    name: task.name, 
-                                    trader: task.trader?.name || "?", 
-                                    count, 
-                                    fir: t.fir 
+                                    id: task.id,
+                                    name: task.name,
+                                    trader: task.trader?.name || "?",
+                                    count: count,
+                                    fir: t.fir
                                 });
                             }
                         }
                     });
                 });
 
-                // Link Hideout
+                // 3. Link Hideout
                 apiData.hideoutStations.forEach(station => {
                     station.levels.forEach(lvl => {
                         lvl.itemRequirements.forEach(req => {
@@ -158,7 +151,7 @@ export function useGlobalData() {
 
                 const globalData = {
                     items: Object.values(itemMap),
-                    itemMap: itemMap,
+                    itemMap: itemMap, // Map for fast lookup
                     tasks: apiData.tasks,
                     hideoutStations: apiData.hideoutStations,
                     keys: keysList

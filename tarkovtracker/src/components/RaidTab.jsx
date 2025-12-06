@@ -13,26 +13,20 @@ export default function RaidTab({ globalData, itemProgress, completedQuests, squ
   useEffect(() => {
     if (!globalData) return;
     
-    // 1. GENERATE BRIEFING
+    // 1. GENERATE BRIEFING & IDENTIFY ACTIVE QUEST IDS
     const newBriefing = [];
+    const mapActiveQuestIds = new Set(); // Store IDs of all active quests on this map
 
-    // Helper to process a user (You or Squadmate)
-    const processUser = (name, quests, hideout) => {
+    // Helper to process a user
+    const processUser = (name, quests) => {
         const userTasks = [];
-
-        // Filter Global Tasks for this Map & User's Active Status
         globalData.tasks.forEach(task => {
-            // Is it on this map?
             const mapId = task.map?.id?.toLowerCase();
             const isMapMatch = mapId === selectedMap || (selectedMap === 'factory4_day' && mapId === 'factory');
             
-            if (isMapMatch) {
-                // Is it active? (Not completed)
-                if (!quests.includes(task.id)) {
-                    // Check prerequisites (Optional: simplistic check if parent is done)
-                    // For now, we just list all incomplete quests on this map
-                    userTasks.push(task.name);
-                }
+            if (isMapMatch && !quests.includes(task.id)) {
+                userTasks.push(task.name);
+                mapActiveQuestIds.add(task.id); // Track this quest ID
             }
         });
 
@@ -42,25 +36,34 @@ export default function RaidTab({ globalData, itemProgress, completedQuests, squ
     };
 
     // Process ME
-    processUser("You", completedQuests, null);
+    processUser("You", completedQuests);
 
     // Process SQUAD
     squadMembers.forEach(m => {
         const d = squadData[m.uid] || {};
-        processUser(m.name, d.quests || [], null);
+        processUser(m.name, d.quests || []);
     });
 
     setBriefing(newBriefing);
 
-    // 2. GENERATE KEY CHECKLIST
-    // Find all keys in database that belong to this map
-    const mapKeys = globalData.keys.filter(k => {
-        // Basic string matching for map name in key name is simpler/safer than deep metadata sometimes
-        const name = k.name.toLowerCase();
-        return name.includes(selectedMap.replace("4_day","").replace("groundzero", "ground zero"));
+    // 2. GENERATE KEY CHECKLIST (Smart)
+    // We look for keys that are EITHER:
+    // A) Associated with this Map directly
+    // B) Required for one of the Active Quests we found above
+
+    const relevantKeys = globalData.keys.filter(k => {
+        // A. Is it a map key? (Simple string match)
+        const mapNameSimple = selectedMap.replace("4_day","").replace("groundzero", "ground zero");
+        const isMapKey = k.name.toLowerCase().includes(mapNameSimple);
+        
+        // B. Is it needed for an ACTIVE QUEST on this map?
+        // Check if any of this item's "questDetails" match our active quest list
+        const isQuestKey = k.questDetails.some(q => mapActiveQuestIds.has(q.id));
+
+        return isMapKey || isQuestKey;
     });
 
-    const keyStatus = mapKeys.map(k => {
+    const keyStatus = relevantKeys.map(k => {
         const owners = [];
         if (ownedKeys[k.id]) owners.push("You");
         
@@ -68,11 +71,24 @@ export default function RaidTab({ globalData, itemProgress, completedQuests, squ
             if (squadData[m.uid]?.keys?.[k.id]) owners.push(m.name);
         });
 
-        if (owners.length > 0) {
-            return { name: k.name, shortName: k.shortName, owners };
+        // Check if it's needed for an active quest
+        const neededFor = k.questDetails.find(q => mapActiveQuestIds.has(q.id));
+
+        // Show if: Someone owns it OR it is needed for a quest
+        if (owners.length > 0 || neededFor) {
+            return { 
+                id: k.id,
+                name: k.name, 
+                shortName: k.shortName, 
+                owners, 
+                neededFor: neededFor ? neededFor.name : null 
+            };
         }
         return null;
-    }).filter(Boolean); // Remove nulls (keys nobody has)
+    }).filter(Boolean);
+
+    // Sort: Needed keys first, then owned keys
+    keyStatus.sort((a, b) => (b.neededFor ? 1 : 0) - (a.neededFor ? 1 : 0));
 
     setKeyCheck(keyStatus);
 
@@ -102,9 +118,9 @@ export default function RaidTab({ globalData, itemProgress, completedQuests, squ
           </div>
       </div>
 
-      <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px'}}>
+      <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '20px'}}>
           
-          {/* LEFT: MISSION BRIEFING */}
+          {/* BRIEFING */}
           <div className="result-card">
               <h3 style={{borderBottom:'1px solid #444', paddingBottom:'10px', marginTop:0}}>🎯 Mission Briefing</h3>
               {briefing.length === 0 ? (
@@ -125,26 +141,39 @@ export default function RaidTab({ globalData, itemProgress, completedQuests, squ
               )}
           </div>
 
-          {/* RIGHT: LOGISTICS (Keys) */}
+          {/* KEY CHECK */}
           <div className="result-card">
               <h3 style={{borderBottom:'1px solid #444', paddingBottom:'10px', marginTop:0}}>🔑 Key Check</h3>
               {keyCheck.length === 0 ? (
-                  <div style={{padding:'20px', color:'#666', fontStyle:'italic'}}>No keys owned for this map.</div>
+                  <div style={{padding:'20px', color:'#666', fontStyle:'italic'}}>No important keys found for this map.</div>
               ) : (
                   <div style={{maxHeight:'500px', overflowY:'auto'}}>
                       {keyCheck.map((k, i) => (
-                          <div key={i} style={{display:'flex', justifyContent:'space-between', padding:'8px', borderBottom:'1px solid #333'}}>
-                              <div>
-                                  <div style={{fontWeight:'bold', fontSize:'0.9rem'}}>{k.name}</div>
-                                  <div style={{fontSize:'0.8rem', color:'#888'}}>{k.shortName}</div>
+                          <div key={i} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px', borderBottom:'1px solid #333'}}>
+                              <div style={{flex:1}}>
+                                  <div style={{fontWeight:'bold', fontSize:'0.9rem', color: k.neededFor ? '#ffcc80' : '#eee'}}>
+                                      {k.name}
+                                  </div>
+                                  {k.neededFor && (
+                                      <div style={{fontSize:'0.8rem', color:'#ef5350'}}>
+                                          [!] Needed for: {k.neededFor}
+                                      </div>
+                                  )}
                               </div>
-                              <div style={{textAlign:'right'}}>
-                                  <span style={{
-                                      background: '#1b5e20', color: '#a5d6a7', 
-                                      padding: '2px 8px', borderRadius: '10px', fontSize: '0.8rem'
-                                  }}>
-                                      {k.owners.join(", ")}
-                                  </span>
+                              
+                              <div style={{textAlign:'right', minWidth:'100px'}}>
+                                  {k.owners.length > 0 ? (
+                                      <span style={{
+                                          background: '#1b5e20', color: '#a5d6a7', 
+                                          padding: '2px 8px', borderRadius: '10px', fontSize: '0.8rem'
+                                      }}>
+                                          {k.owners.join(", ")}
+                                      </span>
+                                  ) : (
+                                      <span style={{color:'#666', fontSize:'0.8rem', fontStyle:'italic'}}>
+                                          Missing
+                                      </span>
+                                  )}
                               </div>
                           </div>
                       ))}
