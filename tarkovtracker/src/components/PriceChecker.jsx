@@ -33,7 +33,7 @@ export default function PriceChecker({ globalData, itemProgress, hideoutLevels, 
         {results.map((item, idx) => {
             const userHas = itemProgress[item.id] || 0;
             
-            // Separate Active vs Completed Quests
+            // Quest Status Logic
             const activeQuests = [];
             const completedQuestList = [];
 
@@ -66,18 +66,18 @@ export default function PriceChecker({ globalData, itemProgress, hideoutLevels, 
             }
             const profit = finalFlea - bestTrader.price;
 
-            // Squad
+            // Squad Logic
             const squadNeeds = [];
             if (squadMembers && squadMembers.length > 0) {
-                squadMembers.forEach(m => {
-                    const d = squadData[m.uid] || {};
+                squadMembers.forEach(member => {
+                    const d = squadData[member.uid] || {};
                     const mHas = d.progress?.[item.id] || 0;
                     const mQuests = d.quests || [];
                     const mHideout = d.hideout || {};
                     let mNeed = 0, mFir = false;
                     item.questDetails.forEach(q => { if(!mQuests.includes(q.id)) { mNeed += q.count; if(q.fir) mFir = true; }});
                     item.hideoutDetails.forEach(h => { if((mHideout[h.station]||0) < h.level) mNeed += h.count; });
-                    if (mNeed > mHas) squadNeeds.push({ name: m.name, photo: m.photo, missing: mNeed - mHas, fir: mFir });
+                    if (mNeed > mHas) squadNeeds.push({ name: member.name, photo: member.photo, missing: mNeed - mHas, fir: mFir });
                 });
             }
 
@@ -96,7 +96,7 @@ export default function PriceChecker({ globalData, itemProgress, hideoutLevels, 
                         <img 
                             src={item.iconLink} 
                             alt="" 
-                            style={{width: 64, height: 64, cursor: 'context-menu'}} 
+                            style={{width: 64, height: 64, cursor: 'context-menu'}}
                             onContextMenu={openWiki}
                             title="Right-click for Wiki"
                         />
@@ -125,7 +125,6 @@ export default function PriceChecker({ globalData, itemProgress, hideoutLevels, 
                 ) : (
                     <div className="not-needed">
                         No active tasks.
-                        {/* SHOW COMPLETED QUESTS HERE */}
                         {completedQuestList.length > 0 && (
                             <div style={{marginTop: '8px', fontSize: '0.85em', color: '#666'}}>
                                 <div>Used in completed quests:</div>

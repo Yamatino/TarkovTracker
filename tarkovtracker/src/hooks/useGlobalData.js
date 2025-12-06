@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { runQuery } from '../api';
 
-// Bump cache to v15 to get the new 'wikiLink' field
-const CACHE_KEY = 'tarkov_global_cache_v15';
+// Bump cache to v16 to force a fresh download with ALL fields
+const CACHE_KEY = 'tarkov_global_cache_v16';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; 
 
 export function useGlobalData() {
@@ -13,6 +13,7 @@ export function useGlobalData() {
     useEffect(() => {
         const load = async () => {
             try {
+                // 1. Check Cache
                 const cached = localStorage.getItem(CACHE_KEY);
                 if (cached) {
                     try {
@@ -25,9 +26,10 @@ export function useGlobalData() {
                     } catch(e) { console.warn("Cache corrupt, reloading."); }
                 }
 
+                // 2. Fetch API Data
                 setStatus("Fetching Tarkov.dev Database...");
                 
-                // ADDED 'wikiLink' TO ITEMS QUERY
+                // THE ULTIMATE QUERY: Contains fields for Graph, Tracker, and Price Check
                 const apiQuery = `
                 {
                     items(limit: 4500) { 
@@ -35,8 +37,19 @@ export function useGlobalData() {
                         sellFor { price currency vendor { name } }
                     }
                     tasks {
-                        id name trader { name }
-                        objectives { type ... on TaskObjectiveItem { count foundInRaid item { id } } }
+                        id 
+                        name 
+                        trader { name }
+                        minPlayerLevel              # Needed for Graph labels
+                        kappaRequired               # Needed for Graph Badge
+                        wikiLink                    # Needed for Right-Click
+                        taskRequirements {          # CRITICAL: Needed for Graph connections
+                            task { id } 
+                        }
+                        objectives { 
+                            type 
+                            ... on TaskObjectiveItem { count foundInRaid item { id } } 
+                        }
                     }
                     hideoutStations {
                         name imageLink
@@ -67,6 +80,7 @@ export function useGlobalData() {
                 
                 keysList.sort((a, b) => a.name.localeCompare(b.name));
 
+                // Link Quests (with Duplicate Fix)
                 apiData.tasks.forEach(task => {
                     const taskItems = {};
                     task.objectives.forEach(obj => {
@@ -91,6 +105,7 @@ export function useGlobalData() {
                     });
                 });
 
+                // Link Hideout
                 apiData.hideoutStations.forEach(station => {
                     station.levels.forEach(lvl => {
                         lvl.itemRequirements.forEach(req => {
