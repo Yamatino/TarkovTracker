@@ -13,7 +13,6 @@ export default function PriceChecker({ globalData, itemProgress, hideoutLevels, 
     if (!term.trim()) return;
     const q = term.toLowerCase().trim();
 
-    // Filter Global Data directly (Instant)
     let matches = globalData.items.filter(i => 
         (i.name && i.name.toLowerCase().includes(q)) || 
         (i.shortName && i.shortName.toLowerCase().includes(q))
@@ -34,9 +33,19 @@ export default function PriceChecker({ globalData, itemProgress, hideoutLevels, 
         {results.map((item, idx) => {
             const userHas = itemProgress[item.id] || 0;
             
-            // 1. Calculate Needs
+            // Separate Active vs Completed Quests
+            const activeQuests = [];
+            const completedQuestList = [];
+
+            item.questDetails.forEach(q => {
+                if (completedQuests.includes(q.id)) {
+                    completedQuestList.push(q);
+                } else {
+                    activeQuests.push(q);
+                }
+            });
+
             let questNeeded = 0;
-            const activeQuests = item.questDetails.filter(q => !completedQuests.includes(q.id));
             activeQuests.forEach(q => questNeeded += q.count);
 
             let hideoutNeeded = 0;
@@ -46,7 +55,7 @@ export default function PriceChecker({ globalData, itemProgress, hideoutLevels, 
             const totalNeeded = questNeeded + hideoutNeeded;
             const isComplete = userHas >= totalNeeded && totalNeeded > 0;
 
-            // 2. Calculate Prices (From Global Cache)
+            // Prices
             let bestTrader = { name: "None", price: 0 }, finalFlea = 0;
             if (item.sellFor) {
                 item.sellFor.forEach(sale => {
@@ -57,7 +66,7 @@ export default function PriceChecker({ globalData, itemProgress, hideoutLevels, 
             }
             const profit = finalFlea - bestTrader.price;
 
-            // 3. Squad Logic (With Images)
+            // Squad
             const squadNeeds = [];
             if (squadMembers && squadMembers.length > 0) {
                 squadMembers.forEach(m => {
@@ -66,29 +75,36 @@ export default function PriceChecker({ globalData, itemProgress, hideoutLevels, 
                     const mQuests = d.quests || [];
                     const mHideout = d.hideout || {};
                     let mNeed = 0, mFir = false;
-
                     item.questDetails.forEach(q => { if(!mQuests.includes(q.id)) { mNeed += q.count; if(q.fir) mFir = true; }});
                     item.hideoutDetails.forEach(h => { if((mHideout[h.station]||0) < h.level) mNeed += h.count; });
-                    
-                    if (mNeed > mHas) {
-                         squadNeeds.push({ 
-                             name: m.name, 
-                             photo: m.photo, // <--- Capture Photo
-                             missing: mNeed - mHas, 
-                             fir: mFir 
-                         });
-                    }
+                    if (mNeed > mHas) squadNeeds.push({ name: m.name, photo: m.photo, missing: mNeed - mHas, fir: mFir });
                 });
             }
 
-            // 4. Key Logic
             const isKey = item.types?.includes('key') || item.name.toLowerCase().includes('key');
+
+            // WIKI HANDLER
+            const openWiki = (e) => {
+                e.preventDefault();
+                if (item.wikiLink) window.open(item.wikiLink, '_blank');
+            };
 
             return (
               <div key={idx} className="result-card">
                 <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
-                    {item.iconLink && <img src={item.iconLink} alt="" style={{width: 64, height: 64}} />}
-                    <div><h3>{item.name}</h3><div style={{color:'#666', fontSize:'0.8em'}}>{item.shortName}</div></div>
+                    {item.iconLink && (
+                        <img 
+                            src={item.iconLink} 
+                            alt="" 
+                            style={{width: 64, height: 64, cursor: 'context-menu'}} 
+                            onContextMenu={openWiki}
+                            title="Right-click for Wiki"
+                        />
+                    )}
+                    <div>
+                        <h3>{item.name}</h3>
+                        <div style={{color:'#666', fontSize:'0.8em'}}>{item.shortName}</div>
+                    </div>
                 </div>
 
                 {isKey && (
@@ -106,29 +122,31 @@ export default function PriceChecker({ globalData, itemProgress, hideoutLevels, 
                              {activeHideout.length > 0 && <ul style={{margin:'5px 0 5px 20px', color:'#ddd'}}>{activeHideout.map((h,i)=><li key={i}>{h.station} (Lvl {h.level}): <b>{h.count}</b></li>)}</ul>}
                         </div>}
                     </div>
-                ) : <div className="not-needed">No active tasks.</div>}
-
-                {/* NEW: SQUAD ALERT WITH IMAGES */}
-                {squadNeeds.length > 0 && (
-                    <div style={SQUAD_ALERT_STYLE}>
-                        <div style={{fontWeight:'bold', marginBottom:'5px'}}>Needed by Squad:</div>
-                        {squadNeeds.map((s, i) => (
-                            <div key={i} style={{display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px'}}>
-                                {s.photo ? (
-                                    <img src={s.photo} style={{width: 20, height: 20, borderRadius: '50%', objectFit:'cover'}} alt="" />
-                                ) : (
-                                    <span style={{width:20, height:20, borderRadius:'50%', background:'#0d47a1', color:'#fff', fontSize:'0.7em', display:'flex', alignItems:'center', justifyContent:'center'}}>
-                                        {s.name.charAt(0)}
-                                    </span>
-                                )}
-                                <span>
-                                    {s.name} needs <b>{s.missing}</b>
-                                    {s.fir && <span style={FIR_STYLE}>(FIR)</span>}
-                                </span>
+                ) : (
+                    <div className="not-needed">
+                        No active tasks.
+                        {/* SHOW COMPLETED QUESTS HERE */}
+                        {completedQuestList.length > 0 && (
+                            <div style={{marginTop: '8px', fontSize: '0.85em', color: '#666'}}>
+                                <div>Used in completed quests:</div>
+                                <ul style={{margin: '2px 0 0 20px', padding: 0}}>
+                                    {completedQuestList.map((q, i) => (
+                                        <li key={i} style={{textDecoration: 'line-through'}}>
+                                            {q.name} ({q.trader})
+                                        </li>
+                                    ))}
+                                </ul>
                             </div>
-                        ))}
+                        )}
                     </div>
                 )}
+
+                {squadNeeds.length > 0 && <div style={SQUAD_ALERT_STYLE}><b>Needed by Squad:</b>{squadNeeds.map((s, i) => (
+                    <div key={i} style={{display:'flex', alignItems:'center', gap:'8px', marginTop:'4px'}}>
+                        {s.photo ? <img src={s.photo} style={{width:20, height:20, borderRadius:'50%'}}/> : <span style={{width:20, height:20, background:'#0d47a1', borderRadius:'50%', textAlign:'center', fontSize:'0.7em'}}>{s.name[0]}</span>}
+                        {s.name} needs <b>{s.missing}</b>{s.fir && <span style={FIR_STYLE}>(FIR)</span>}
+                    </div>
+                ))}</div>}
                 
                 <div className="prices">
                     <div className="trader-price">Trader: {bestTrader.name}<br/><b>{bestTrader.price.toLocaleString()} ₽</b></div>

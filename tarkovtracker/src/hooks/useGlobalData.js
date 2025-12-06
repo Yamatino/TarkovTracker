@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { runQuery } from '../api';
 
-// Bump cache version to v14 to force a re-download with new fields
-const CACHE_KEY = 'tarkov_global_cache_v14';
+// Bump cache to v15 to get the new 'wikiLink' field
+const CACHE_KEY = 'tarkov_global_cache_v15';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; 
 
 export function useGlobalData() {
@@ -13,7 +13,6 @@ export function useGlobalData() {
     useEffect(() => {
         const load = async () => {
             try {
-                // 1. Check Cache
                 const cached = localStorage.getItem(CACHE_KEY);
                 if (cached) {
                     try {
@@ -26,23 +25,17 @@ export function useGlobalData() {
                     } catch(e) { console.warn("Cache corrupt, reloading."); }
                 }
 
-                // 2. Fetch API Data
                 setStatus("Fetching Tarkov.dev Database...");
                 
+                // ADDED 'wikiLink' TO ITEMS QUERY
                 const apiQuery = `
                 {
                     items(limit: 4500) { 
-                        id name shortName iconLink types avg24hPrice 
+                        id name shortName iconLink wikiLink types avg24hPrice 
                         sellFor { price currency vendor { name } }
                     }
                     tasks {
-                        id 
-                        name 
-                        kappaRequired   # <--- NEW FIELD
-                        wikiLink        # <--- NEW FIELD
-                        trader { name }
-                        minPlayerLevel
-                        taskRequirements { task { id } }
+                        id name trader { name }
                         objectives { type ... on TaskObjectiveItem { count foundInRaid item { id } } }
                     }
                     hideoutStations {
@@ -55,21 +48,25 @@ export function useGlobalData() {
                 if (!apiData || !apiData.items) throw new Error("API fetch failed");
 
                 setStatus("Processing Items...");
-                
-                // ... (Keep the rest of the processing logic exactly the same) ...
                 const itemMap = {};
                 const keysList = [];
 
                 apiData.items.forEach(i => {
                     itemMap[i.id] = { ...i, questDetails: [], hideoutDetails: [] };
-                    if ((i.types?.includes('key') || i.name.toLowerCase().includes('key')) && !i.types?.includes('barter')) {
+                    
+                    const nameLower = i.name.toLowerCase();
+                    const looksLikeKey = (i.types?.includes('keys') || i.types?.includes('key') || nameLower.includes('key'));
+                    const isWeaponPart = i.types?.includes('modification') || i.types?.includes('preset');
+                    const isFalsePositive = nameLower.includes('keymod') || nameLower.includes('keyslot') || nameLower.includes('keymount');
+                    const isTrash = i.types?.includes('barter') && !nameLower.includes('key');
+
+                    if (looksLikeKey && !isWeaponPart && !isFalsePositive && !isTrash) {
                         keysList.push(i);
                     }
                 });
                 
                 keysList.sort((a, b) => a.name.localeCompare(b.name));
 
-                // Link Quests
                 apiData.tasks.forEach(task => {
                     const taskItems = {};
                     task.objectives.forEach(obj => {
@@ -94,7 +91,6 @@ export function useGlobalData() {
                     });
                 });
 
-                // Link Hideout
                 apiData.hideoutStations.forEach(station => {
                     station.levels.forEach(lvl => {
                         lvl.itemRequirements.forEach(req => {
