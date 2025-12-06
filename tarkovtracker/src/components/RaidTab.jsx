@@ -5,6 +5,17 @@ const MAP_IDS = [
     "shoreline", "reserve", "streets", "groundzero", "laboratory"
 ];
 
+// HELPER: Generate text since API description is missing
+const generateDescription = (obj) => {
+    if (!obj) return "";
+    if (obj.type === 'giveItem' && obj.item) return `Hand over ${obj.count} ${obj.item.name}`;
+    if (obj.type === 'findItem' && obj.item) return `Find ${obj.count} ${obj.item.name}`;
+    if (obj.type === 'plantItem' && obj.item) return `Place ${obj.count} ${obj.item.name}`;
+    if (obj.type === 'taskZone') return "Visit / Mark location";
+    if (obj.type === 'shoot') return "Eliminate targets";
+    return "Complete objective";
+};
+
 export default function RaidTab({ globalData, itemProgress, completedQuests, squadMembers, squadData, ownedKeys }) {
   const [selectedMap, setSelectedMap] = useState("customs");
   const [briefing, setBriefing] = useState([]);
@@ -25,10 +36,12 @@ export default function RaidTab({ globalData, itemProgress, completedQuests, squ
             const mapId = task.map?.id?.toLowerCase();
             if (mapId === mapSearchId || mapId === currentMapId) {
                 if (!quests.includes(task.id)) {
-                    // PUSH OBJECT WITH OBJECTIVES
+                    // Generate Descriptions Locally
+                    const descriptions = task.objectives.map(generateDescription);
+                    
                     userTasks.push({
                         name: task.name,
-                        objectives: task.objectives || []
+                        objectives: descriptions
                     });
                     mapActiveQuestIds.add(task.id);
                 }
@@ -80,7 +93,6 @@ export default function RaidTab({ globalData, itemProgress, completedQuests, squ
 
   return (
     <div className="tab-content">
-      {/* MAP SELECTOR */}
       <div className="result-card" style={{textAlign: 'center', marginBottom: '20px'}}>
           <h3 style={{marginTop:0}}>Select Raid Location</h3>
           <div style={{display:'flex', flexWrap:'wrap', gap:'10px', justifyContent:'center'}}>
@@ -104,7 +116,6 @@ export default function RaidTab({ globalData, itemProgress, completedQuests, squ
 
       <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '20px'}}>
           
-          {/* BRIEFING */}
           <div className="result-card">
               <h3 style={{borderBottom:'1px solid #444', paddingBottom:'10px', marginTop:0}}>🎯 Mission Briefing</h3>
               {briefing.length === 0 ? (
@@ -116,7 +127,6 @@ export default function RaidTab({ globalData, itemProgress, completedQuests, squ
                               <div style={{fontWeight:'bold', color: b.name === 'You' ? 'var(--accent-color)' : '#90caf9', marginBottom:'5px'}}>
                                   {b.name}
                               </div>
-                              {/* RENDER OBJECTIVES */}
                               <ul style={{margin:0, paddingLeft:'20px', color:'#ddd'}}>
                                   {b.tasks.map((task, j) => (
                                       <li key={j} style={{marginBottom: '8px'}}>
@@ -124,7 +134,7 @@ export default function RaidTab({ globalData, itemProgress, completedQuests, squ
                                           {task.objectives.length > 0 && (
                                               <ul style={{fontSize: '0.9em', color: '#aaa', marginTop: '2px', paddingLeft: '15px'}}>
                                                   {task.objectives.map((obj, k) => (
-                                                      <li key={k}>{obj.description}</li>
+                                                      <li key={k}>{obj}</li>
                                                   ))}
                                               </ul>
                                           )}
@@ -137,7 +147,6 @@ export default function RaidTab({ globalData, itemProgress, completedQuests, squ
               )}
           </div>
 
-          {/* KEY CHECK */}
           <div className="result-card">
               <h3 style={{borderBottom:'1px solid #444', paddingBottom:'10px', marginTop:0}}>🔑 Key Check</h3>
               {keyCheck.length === 0 ? (

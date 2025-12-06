@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { runQuery } from '../api';
 
-// Bump to v21 to fetch Objective Descriptions
-const CACHE_KEY = 'tarkov_global_cache_v21';
+// Bump to v22 to clear the broken "v21" cache
+const CACHE_KEY = 'tarkov_global_cache_v22';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; 
 
 export function useGlobalData() {
@@ -39,9 +39,9 @@ export function useGlobalData() {
                         minPlayerLevel kappaRequired wikiLink
                         taskRequirements { task { id } }
                         objectives { 
-                            description  # <--- NEW: Fetch text description
                             type 
-                            ... on TaskObjectiveItem { count foundInRaid item { id } } 
+                            ... on TaskObjectiveItem { count foundInRaid item { id name } } 
+                            ... on TaskObjectiveZone { zoneId }
                         }
                     }
                     hideoutStations {
