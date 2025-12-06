@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { runQuery } from '../api';
 
-// Bump to v19 to clear the broken cache
-const CACHE_KEY = 'tarkov_global_cache_v19';
+// CRITICAL: Bump to v20 to force fresh download with MAP IDs
+const CACHE_KEY = 'tarkov_global_cache_v20';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; 
 
 export function useGlobalData() {
@@ -13,7 +13,6 @@ export function useGlobalData() {
     useEffect(() => {
         const load = async () => {
             try {
-                // 1. Check Cache
                 const cached = localStorage.getItem(CACHE_KEY);
                 if (cached) {
                     try {
@@ -33,10 +32,12 @@ export function useGlobalData() {
                     items(limit: 4800) { 
                         id name shortName iconLink wikiLink types avg24hPrice 
                         sellFor { price currency vendor { name } }
+                        # Fetch map ID for the tasks this item is used in
                         usedInTasks { id name trader { name } map { id } } 
                     }
                     tasks {
-                        id name trader { name } map { id }
+                        id name trader { name } 
+                        map { id } # CRITICAL FOR RAID TAB
                         minPlayerLevel kappaRequired wikiLink
                         taskRequirements { task { id } }
                         objectives { type ... on TaskObjectiveItem { count foundInRaid item { id } } }
@@ -54,12 +55,12 @@ export function useGlobalData() {
                 const itemMap = {};
                 const keysList = [];
 
-                // 1. Init Items & Keys List
                 apiData.items.forEach(i => {
-                    // CRITICAL FIX: Create the object reference FIRST
+                    // Create Item Object
                     const newItem = { ...i, questDetails: [], hideoutDetails: [] };
                     itemMap[i.id] = newItem;
                     
+                    // Filter Keys
                     const n = i.name.toLowerCase();
                     const t = i.types || [];
                     const isKey = (t.includes('keys') || t.includes('key') || n.includes('key')) 
@@ -69,15 +70,12 @@ export function useGlobalData() {
                                   && !n.includes('keyslot')
                                   && (!t.includes('barter') || n.includes('key'));
 
-                    // PUSH THE NEW ITEM (which has questDetails), NOT 'i'
                     if (isKey) keysList.push(newItem);
                 });
                 
                 keysList.sort((a, b) => a.name.localeCompare(b.name));
 
-                // 2. Process Quest Requirements
-                
-                // A. "Used In Tasks"
+                // Process "Used In Tasks" (Keys/Tools)
                 apiData.items.forEach(i => {
                     if (i.usedInTasks) {
                         i.usedInTasks.forEach(t => {
@@ -87,6 +85,8 @@ export function useGlobalData() {
                                     id: t.id,
                                     name: t.name,
                                     trader: t.trader?.name || "?",
+                                    // Store Map ID here for easy filtering later
+                                    mapId: t.map?.id?.toLowerCase(),
                                     count: 1,
                                     fir: false,
                                     isKey: true
@@ -96,7 +96,7 @@ export function useGlobalData() {
                     }
                 });
 
-                // B. "Objectives"
+                // Process "Objectives" (Find/Handover)
                 apiData.tasks.forEach(task => {
                     const taskItems = {};
                     task.objectives.forEach(obj => {
@@ -121,9 +121,12 @@ export function useGlobalData() {
                                 const ex = itemMap[iid].questDetails[existingIndex];
                                 ex.count = Math.max(ex.count, count);
                                 if (t.fir) ex.fir = true;
+                                // Update map ID if missing
+                                if (!ex.mapId && task.map) ex.mapId = task.map.id.toLowerCase();
                             } else {
                                 itemMap[iid].questDetails.push({
                                     id: task.id, name: task.name, trader: task.trader?.name || "?", 
+                                    mapId: task.map?.id?.toLowerCase(),
                                     count, fir: t.fir 
                                 });
                             }
@@ -131,7 +134,7 @@ export function useGlobalData() {
                     });
                 });
 
-                // 3. Link Hideout
+                // Link Hideout
                 apiData.hideoutStations.forEach(station => {
                     station.levels.forEach(lvl => {
                         lvl.itemRequirements.forEach(req => {
