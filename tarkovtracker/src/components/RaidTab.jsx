@@ -13,26 +13,24 @@ export default function RaidTab({ globalData, itemProgress, completedQuests, squ
   useEffect(() => {
     if (!globalData) return;
     
-    // 0. NORMALIZE MAP ID
-    // API uses 'factory4_day', tasks often just say 'factory'
     const currentMapId = selectedMap;
     const mapSearchId = selectedMap === 'factory4_day' ? 'factory' : selectedMap;
 
-    // 1. GENERATE BRIEFING & FIND ACTIVE QUESTS
     const newBriefing = [];
-    const activeQuestIdsOnMap = new Set(); // Track IDs for key filtering later
+    const mapActiveQuestIds = new Set(); 
 
     const processUser = (name, quests) => {
         const userTasks = [];
-        
         globalData.tasks.forEach(task => {
-            // Check if task is on this map
-            const tMap = task.map?.id?.toLowerCase();
-            if (tMap === mapSearchId || tMap === currentMapId) {
-                // Check if completed
+            const mapId = task.map?.id?.toLowerCase();
+            if (mapId === mapSearchId || mapId === currentMapId) {
                 if (!quests.includes(task.id)) {
-                    userTasks.push(task.name);
-                    activeQuestIdsOnMap.add(task.id);
+                    // PUSH OBJECT WITH OBJECTIVES
+                    userTasks.push({
+                        name: task.name,
+                        objectives: task.objectives || []
+                    });
+                    mapActiveQuestIds.add(task.id);
                 }
             }
         });
@@ -50,61 +48,32 @@ export default function RaidTab({ globalData, itemProgress, completedQuests, squ
 
     setBriefing(newBriefing);
 
-    // 2. GENERATE KEY CHECKLIST
-    // Logic: Show key if it is related to the Map OR an Active Quest on the map
-    
     const relevantKeys = globalData.keys.filter(k => {
-        // A. Name Match (Fallback)
         const mapNameSimple = selectedMap.replace("4_day","").replace("groundzero", "ground zero");
-        if (k.name.toLowerCase().includes(mapNameSimple)) return true;
-
-        // B. Quest Linkage (Smart Check)
-        // Does this key belong to ANY quest that is on this map?
-        // We use the 'questDetails' array we built in the Global Loader
-        if (k.questDetails) {
-            return k.questDetails.some(q => {
-                // Check if the quest itself is on this map
-                // We use the pre-stored mapId from the loader or look up the task
-                if (q.mapId === mapSearchId || q.mapId === currentMapId) return true;
-                
-                // Fallback: Look up the global task object if mapId wasn't stored directly
-                const taskRef = globalData.tasks.find(t => t.id === q.id);
-                const taskMap = taskRef?.map?.id?.toLowerCase();
-                return taskMap === mapSearchId || taskMap === currentMapId;
-            });
-        }
-        return false;
+        const isMapKey = k.name.toLowerCase().includes(mapNameSimple);
+        const isQuestKey = k.questDetails?.some(q => mapActiveQuestIds.has(q.id));
+        return isMapKey || isQuestKey;
     });
 
     const keyStatus = relevantKeys.map(k => {
         const owners = [];
         if (ownedKeys[k.id]) owners.push("You");
-        
         squadMembers.forEach(m => {
             if (squadData[m.uid]?.keys?.[k.id]) owners.push(m.name);
         });
 
-        // Check if it's needed for a SPECIFIC active quest (for highlighting)
-        const neededFor = k.questDetails?.find(q => activeQuestIdsOnMap.has(q.id));
+        const neededFor = k.questDetails?.find(q => mapActiveQuestIds.has(q.id));
 
-        // Display Rules:
-        // 1. If it's needed for an active quest -> SHOW IT (Priority)
-        // 2. If someone owns it -> SHOW IT (Inventory check)
-        if (neededFor || owners.length > 0) {
+        if (owners.length > 0 || neededFor) {
             return { 
-                id: k.id,
-                name: k.name, 
-                shortName: k.shortName, 
-                owners, 
-                neededFor: neededFor ? neededFor.name : null 
+                id: k.id, name: k.name, shortName: k.shortName, 
+                owners, neededFor: neededFor ? neededFor.name : null 
             };
         }
         return null;
     }).filter(Boolean);
 
-    // Sort: Active Quest Keys first, then Owned Keys
     keyStatus.sort((a, b) => (b.neededFor ? 1 : 0) - (a.neededFor ? 1 : 0));
-
     setKeyCheck(keyStatus);
 
   }, [selectedMap, globalData, completedQuests, squadMembers, squadData, ownedKeys]);
@@ -147,8 +116,20 @@ export default function RaidTab({ globalData, itemProgress, completedQuests, squ
                               <div style={{fontWeight:'bold', color: b.name === 'You' ? 'var(--accent-color)' : '#90caf9', marginBottom:'5px'}}>
                                   {b.name}
                               </div>
+                              {/* RENDER OBJECTIVES */}
                               <ul style={{margin:0, paddingLeft:'20px', color:'#ddd'}}>
-                                  {b.tasks.map((t, j) => <li key={j}>{t}</li>)}
+                                  {b.tasks.map((task, j) => (
+                                      <li key={j} style={{marginBottom: '8px'}}>
+                                          <div style={{fontWeight: 'bold'}}>{task.name}</div>
+                                          {task.objectives.length > 0 && (
+                                              <ul style={{fontSize: '0.9em', color: '#aaa', marginTop: '2px', paddingLeft: '15px'}}>
+                                                  {task.objectives.map((obj, k) => (
+                                                      <li key={k}>{obj.description}</li>
+                                                  ))}
+                                              </ul>
+                                          )}
+                                      </li>
+                                  ))}
                               </ul>
                           </div>
                       ))}
