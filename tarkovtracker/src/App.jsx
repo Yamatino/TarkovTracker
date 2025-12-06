@@ -11,6 +11,7 @@ import HideoutTab from './components/HideoutTab';
 import QuestsTab from './components/QuestsTab';
 import SquadTab from './components/SquadTab';
 import KeyringTab from './components/KeyringTab';
+import RaidTab from './components/RaidTab'; // <--- IMPORT
 import './App.css';
 
 function App() {
@@ -42,29 +43,25 @@ function App() {
       );
   }
 
-  // Helper for button text
-  const getSquadLabel = () => {
-      if (!squadCode) return "Squad (Login)";
-      if (squadCode === "general-lobby") return "Squad (Lobby)";
-      return "Squad"; // Keep it short so it doesn't wrap
-  };
-
   return (
     <div className="app-container">
       <header>
         <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
             <img src="/image.ico" alt="Logo" style={{width: '40px', height: '40px'}} />
-            <h1 className="app-title">Tarkov Tracker</h1>
+            <h1>Tarkov Tracker by Yama</h1>
         </div>
 
         <nav>
           <button className={activeTab === 'search' ? 'active' : ''} onClick={() => setActiveTab('search')}>Price Check</button>
+          {/* NEW RAID TAB */}
+          <button className={activeTab === 'raid' ? 'active' : ''} onClick={() => setActiveTab('raid')}>Raid</button>
+          
           <button className={activeTab === 'tracker' ? 'active' : ''} onClick={() => setActiveTab('tracker')}>Tracker</button>
           <button className={activeTab === 'hideout' ? 'active' : ''} onClick={() => setActiveTab('hideout')}>Hideout</button>
           <button className={activeTab === 'quests' ? 'active' : ''} onClick={() => setActiveTab('quests')}>Quests</button>
           <button className={activeTab === 'keys' ? 'active' : ''} onClick={() => setActiveTab('keys')}>Keyring</button>
           <button className={activeTab === 'squad' ? 'active' : ''} onClick={() => setActiveTab('squad')}>
-             {getSquadLabel()}
+             {squadCode ? `Squad: ${squadCode}` : "Squad (Login)"}
           </button>
         </nav>
       </header>
@@ -75,6 +72,17 @@ function App() {
             globalData={globalData} 
             itemProgress={itemProgress} 
             hideoutLevels={hideoutLevels} 
+            completedQuests={completedQuests}
+            squadMembers={squadMembers}
+            squadData={squadData}
+            ownedKeys={ownedKeys}
+          />
+        )}
+        {/* NEW RAID TAB */}
+        {activeTab === 'raid' && (
+          <RaidTab 
+            globalData={globalData}
+            itemProgress={itemProgress}
             completedQuests={completedQuests}
             squadMembers={squadMembers}
             squadData={squadData}
