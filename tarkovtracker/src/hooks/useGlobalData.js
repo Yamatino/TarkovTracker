@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { runQuery } from '../api';
 
-// Bump to v18 to force a clean reload of the logic
-const CACHE_KEY = 'tarkov_global_cache_v18';
+// Bump to v19 to clear the broken cache
+const CACHE_KEY = 'tarkov_global_cache_v19';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; 
 
 export function useGlobalData() {
@@ -13,6 +13,7 @@ export function useGlobalData() {
     useEffect(() => {
         const load = async () => {
             try {
+                // 1. Check Cache
                 const cached = localStorage.getItem(CACHE_KEY);
                 if (cached) {
                     try {
@@ -55,7 +56,9 @@ export function useGlobalData() {
 
                 // 1. Init Items & Keys List
                 apiData.items.forEach(i => {
-                    itemMap[i.id] = { ...i, questDetails: [], hideoutDetails: [] };
+                    // CRITICAL FIX: Create the object reference FIRST
+                    const newItem = { ...i, questDetails: [], hideoutDetails: [] };
+                    itemMap[i.id] = newItem;
                     
                     const n = i.name.toLowerCase();
                     const t = i.types || [];
@@ -66,25 +69,25 @@ export function useGlobalData() {
                                   && !n.includes('keyslot')
                                   && (!t.includes('barter') || n.includes('key'));
 
-                    if (isKey) keysList.push(i);
+                    // PUSH THE NEW ITEM (which has questDetails), NOT 'i'
+                    if (isKey) keysList.push(newItem);
                 });
                 
                 keysList.sort((a, b) => a.name.localeCompare(b.name));
 
-                // 2. Process Quest Requirements (Merge "UsedIn" and "Objectives")
+                // 2. Process Quest Requirements
                 
-                // A. "Used In Tasks" (Keys/Tools)
+                // A. "Used In Tasks"
                 apiData.items.forEach(i => {
                     if (i.usedInTasks) {
                         i.usedInTasks.forEach(t => {
-                            // Prevent duplicates later
                             const existing = itemMap[i.id].questDetails.find(q => q.id === t.id);
                             if (!existing) {
                                 itemMap[i.id].questDetails.push({
                                     id: t.id,
                                     name: t.name,
                                     trader: t.trader?.name || "?",
-                                    count: 1, // Keys usually count as 1
+                                    count: 1,
                                     fir: false,
                                     isKey: true
                                 });
@@ -93,10 +96,9 @@ export function useGlobalData() {
                     }
                 });
 
-                // B. "Objectives" (Find/Handover)
+                // B. "Objectives"
                 apiData.tasks.forEach(task => {
                     const taskItems = {};
-                    
                     task.objectives.forEach(obj => {
                         if (obj.item && itemMap[obj.item.id]) {
                             const iid = obj.item.id;
@@ -115,21 +117,14 @@ export function useGlobalData() {
                         
                         if (count > 0) {
                             const existingIndex = itemMap[iid].questDetails.findIndex(q => q.id === task.id);
-                            
                             if (existingIndex > -1) {
-                                // If it exists (e.g. was added as a Key), update it with objective info
-                                // Prioritize the Objective count if it's higher (e.g. need 2 keys?)
-                                // Usually keys are 1, but if it's a handover, we update status
                                 const ex = itemMap[iid].questDetails[existingIndex];
                                 ex.count = Math.max(ex.count, count);
                                 if (t.fir) ex.fir = true;
                             } else {
                                 itemMap[iid].questDetails.push({
-                                    id: task.id,
-                                    name: task.name,
-                                    trader: task.trader?.name || "?",
-                                    count: count,
-                                    fir: t.fir
+                                    id: task.id, name: task.name, trader: task.trader?.name || "?", 
+                                    count, fir: t.fir 
                                 });
                             }
                         }
@@ -151,7 +146,7 @@ export function useGlobalData() {
 
                 const globalData = {
                     items: Object.values(itemMap),
-                    itemMap: itemMap, // Map for fast lookup
+                    itemMap: itemMap,
                     tasks: apiData.tasks,
                     hideoutStations: apiData.hideoutStations,
                     keys: keysList
