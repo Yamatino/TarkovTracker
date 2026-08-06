@@ -21,7 +21,7 @@ function App() {
   const [gameMode, setGameMode] = useState('regular');
 
   // UPDATED: Pass the gameMode to your data fetching hook
-  const { data: globalData, loading, status } = useGlobalData(gameMode);
+  const { data: globalData, loading, status, retry } = useGlobalData(gameMode);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, setUser);
@@ -43,6 +43,17 @@ function App() {
               <h2>Tarkov Tracker by Yama</h2>
               <p style={{color:'#888'}}>{status}</p>
               <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+          </div>
+      );
+  }
+
+  if (!globalData) {
+      return (
+          <div className="app-container" style={{display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', flexDirection:'column'}}>
+              <img src="/image.ico" alt="Error" style={{width:'80px', marginBottom:'20px'}} />
+              <h2>Tarkov Tracker by Yama</h2>
+              <p style={{color:'#e57373'}}>{status}</p>
+              <button onClick={retry} style={{marginTop:'15px', padding:'8px 20px', borderRadius:'6px', background:'#2c2c2c', color:'#fff', border:'1px solid #555', cursor:'pointer'}}>Retry</button>
           </div>
       );
   }

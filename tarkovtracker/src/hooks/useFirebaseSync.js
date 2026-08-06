@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 
 export function useFirebaseSync(user, key, initialValue) {
@@ -8,12 +8,20 @@ export function useFirebaseSync(user, key, initialValue) {
     try {
       const item = window.localStorage.getItem(key);
       return item ? JSON.parse(item) : initialValue;
-    } catch (error) {
+    } catch {
       return initialValue;
     }
   });
 
   const isFirstLoad = useRef(true);
+
+  // Track the latest value in a ref so the listener below can compare against it
+  // without needing `value` in its dependency array (which would tear down and
+  // resubscribe the listener on every local edit).
+  const valueRef = useRef(value);
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
 
   // 2. SYNC FROM CLOUD (Listener)
   useEffect(() => {
@@ -25,9 +33,9 @@ export function useFirebaseSync(user, key, initialValue) {
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         const cloudData = docSnap.data().val;
-        
+
         // Deep compare or simple check to avoid infinite loops
-        if (JSON.stringify(cloudData) !== JSON.stringify(value)) {
+        if (JSON.stringify(cloudData) !== JSON.stringify(valueRef.current)) {
             console.log(`[Cloud] Received update for ${key}`);
             setValue(cloudData);
             // Also update local storage to keep them in sync
@@ -35,7 +43,7 @@ export function useFirebaseSync(user, key, initialValue) {
         }
       } else {
         // If doc doesn't exist yet, create it with current local value
-        setDoc(docRef, { val: value }, { merge: true });
+        setDoc(docRef, { val: valueRef.current }, { merge: true });
       }
       isFirstLoad.current = false;
     });

@@ -135,7 +135,7 @@ export default function QuestsTab({ globalData, completedQuests, setCompletedQue
     const newNodes = [];
     const newEdges = [];
 
-    nodesToRender.forEach(({ task, isPrimary }, id) => {
+    nodesToRender.forEach(({ task, isPrimary }) => {
         let reqText = "";
         if (task.minPlayerLevel > 1) reqText = `Req: Lvl ${task.minPlayerLevel}`;
 
@@ -156,7 +156,7 @@ export default function QuestsTab({ globalData, completedQuests, setCompletedQue
         });
     });
 
-    nodesToRender.forEach(({ task, isPrimary }, id) => {
+    nodesToRender.forEach(({ task, isPrimary }) => {
         if(task.taskRequirements) {
             task.taskRequirements.forEach(req => {
                 const parentId = req.task.id;

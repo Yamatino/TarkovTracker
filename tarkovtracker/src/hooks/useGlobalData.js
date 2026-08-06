@@ -9,6 +9,8 @@ export function useGlobalData(gameMode = 'regular') {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [status, setStatus] = useState("Checking local cache...");
+    const [retryCount, setRetryCount] = useState(0);
+    const retry = () => setRetryCount(c => c + 1);
 
     useEffect(() => {
         const load = async () => {
@@ -26,7 +28,7 @@ export function useGlobalData(gameMode = 'regular') {
                             setLoading(false);
                             return;
                         }
-                    } catch(e) { console.warn(`Cache for ${gameMode} corrupt, reloading.`); }
+                    } catch { console.warn(`Cache for ${gameMode} corrupt, reloading.`); }
                 }
 
                 // 2. Fetch API Data in parallel
@@ -146,7 +148,7 @@ export function useGlobalData(gameMode = 'regular') {
 
                 try {
                     localStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data: globalData }));
-                } catch (e) { console.warn("Quota exceeded."); }
+                } catch { console.warn("Quota exceeded."); }
 
                 setData(globalData);
                 setLoading(false);
@@ -154,11 +156,12 @@ export function useGlobalData(gameMode = 'regular') {
             } catch (e) {
                 console.error("Global Data Error:", e);
                 setStatus(`Error: ${e.message}`);
+                setLoading(false);
             }
         };
 
         load();
-    }, [gameMode]); // Re-run effect whenever gameMode changes
+    }, [gameMode, retryCount]); // Re-run effect whenever gameMode changes or retry() is called
 
-    return { data, loading, status };
+    return { data, loading, status, retry };
 }

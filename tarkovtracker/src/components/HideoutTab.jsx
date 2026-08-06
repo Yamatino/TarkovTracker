@@ -1,13 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo } from 'react';
 
 const PREFERRED_ORDER = ["Vents", "Security", "Lavatory", "Stash", "Generator", "Heating", "Rest Space", "Workbench", "Medstation", "Nutrition Unit", "Water Collector", "Shooting Range", "Library", "Scav Case", "Intelligence Center", "Illumination", "Booze Generator", "Bitcoin Farm", "Solar Power", "Air Filtering Unit", "Defective Wall", "Gym"];
 
 export default function HideoutTab({ globalData, levels, setLevels }) {
-  const [stations, setStations] = useState([]);
-
-  useEffect(() => {
-    // Sort using global data
-    const sorted = [...globalData.hideoutStations].sort((a, b) => {
+  const stations = useMemo(() => {
+    return [...globalData.hideoutStations].sort((a, b) => {
         const indexA = PREFERRED_ORDER.indexOf(a.name);
         const indexB = PREFERRED_ORDER.indexOf(b.name);
         if (indexA !== -1 && indexB !== -1) return indexA - indexB;
@@ -15,7 +12,6 @@ export default function HideoutTab({ globalData, levels, setLevels }) {
         if (indexB !== -1) return 1;
         return a.name.localeCompare(b.name);
     });
-    setStations(sorted);
   }, [globalData]);
 
   const changeLevel = (name, delta, max) => {

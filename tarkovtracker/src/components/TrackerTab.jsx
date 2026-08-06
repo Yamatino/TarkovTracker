@@ -17,8 +17,7 @@ export default function TrackerTab({ globalData, itemProgress, setItemProgress, 
   globalData.items.forEach(item => {
       // Quests
       item.questDetails.forEach(q => {
-          if (excludeCollector && item.name === "Collector") return; // simplified check
-          // Note: "Collector" logic needs more complex tag check usually, but for now:
+          if (excludeCollector && q.name === "Collector") return;
           if (!completedQuests.includes(q.id)) {
              const entry = getEntry(item.id, item.name, item.iconLink, item.types?.[0] || 'item');
              entry.quest += q.count;

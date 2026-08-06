@@ -190,7 +190,7 @@ export default function SquadTab({ user, squadCode, joinSquad, squadMembers, squ
             const data = squadData[m.uid] || {};
             const h = data.hideout || {};
             const q = data.quests || [];
-            const activeStations = Object.entries(h).filter(([_, lvl]) => lvl > 0);
+            const activeStations = Object.entries(h).filter(([, lvl]) => lvl > 0);
 
             return (
                 <div key={m.uid} className="station-card" style={{display:'block'}}>
