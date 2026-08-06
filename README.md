@@ -37,7 +37,7 @@ URL PROD: https://tarkovtracker.pages.dev/
 * **Styling:** Custom CSS (Dark Mode)
 * **State Management:** Custom Firebase Hooks (`useFirebaseSync`)
 * **Database & Auth:** Firebase (Firestore & Authentication)
-* **API:** [tarkov.dev](https://tarkov.dev/) GraphQL API
+* **API:** [tarkov.dev](https://tarkov.dev/) JSON API (`json.tarkov.dev`)
 * **Visualization:** React Flow + Dagre
 * **Hosting:** Cloudflare Pages
 
