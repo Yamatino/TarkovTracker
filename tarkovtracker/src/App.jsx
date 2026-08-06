@@ -16,14 +16,19 @@ import './App.css';
 function App() {
   const [activeTab, setActiveTab] = useState('search');
   const [user, setUser] = useState(null);
+  
+  // NEW: State to track the selected game mode (defaults to regular)
+  const [gameMode, setGameMode] = useState('regular');
 
-  const { data: globalData, loading, status } = useGlobalData();
+  // UPDATED: Pass the gameMode to your data fetching hook
+  const { data: globalData, loading, status } = useGlobalData(gameMode);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, setUser);
     return () => unsub();
   }, []);
 
+  // Firebase sync hooks
   const [itemProgress, setItemProgress] = useFirebaseSync(user, 'tarkov_progress_v2', {});
   const [hideoutLevels, setHideoutLevels] = useFirebaseSync(user, 'tarkov_hideout_levels', {});
   const [completedQuests, setCompletedQuests] = useFirebaseSync(user, 'tarkov_completed_quests', []);
@@ -46,7 +51,7 @@ function App() {
   const getSquadLabel = () => {
       if (!squadCode) return "Squad (Login)";
       if (squadCode === "general-lobby") return "Squad (Lobby)";
-      return "Squad"; // Keep it short so it doesn't wrap
+      return "Squad";
   };
 
   return (
@@ -55,6 +60,26 @@ function App() {
         <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
             <img src="/image.ico" alt="Logo" style={{width: '40px', height: '40px'}} />
             <h1 className="app-title">Tarkov Tracker</h1>
+            
+            {/* NEW: Game Mode Dropdown Selector */}
+            <select 
+              value={gameMode} 
+              onChange={(e) => setGameMode(e.target.value)}
+              className="game-mode-selector"
+              style={{
+                marginLeft: 'auto', 
+                padding: '8px', 
+                borderRadius: '6px', 
+                background: '#2c2c2c', 
+                color: '#fff', 
+                border: '1px solid #555',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="regular">Regular (PvP)</option>
+              <option value="pve">PvE</option>
+              <option value="pvp-season">PvP Season</option>
+            </select>
         </div>
 
         <nav>
@@ -73,6 +98,7 @@ function App() {
         {activeTab === 'search' && (
           <PriceChecker 
             globalData={globalData} 
+            gameMode={gameMode} // NEW: Passed down so PriceChecker can fetch price history
             itemProgress={itemProgress} 
             hideoutLevels={hideoutLevels} 
             completedQuests={completedQuests}
