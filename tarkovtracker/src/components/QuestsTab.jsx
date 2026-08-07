@@ -107,6 +107,7 @@ export default function QuestsTab({ globalData, completedQuests, setCompletedQue
   const [selectedTrader, setSelectedTrader] = useState("Prapor");
   const [filter, setFilter] = useState("");
   const [hideCompleted, setHideCompleted] = useState(false);
+  const [viewMode, setViewMode] = useState("list");
 
   // Questline milestones: Tarkov has no branching "story ending" the API models,
   // but kappaRequired/lightkeeperRequired/factionName are real, trackable chains.
@@ -125,6 +126,62 @@ export default function QuestsTab({ globalData, completedQuests, setCompletedQue
       faction: faction ? countGroup(t => t.factionName === faction) : null,
     };
   }, [globalData, completedQuests, faction]);
+
+  const toggleQuest = useCallback((id) => {
+    const isDone = completedQuests.includes(id);
+    const newCompleted = isDone ? completedQuests.filter(x => x !== id) : [...completedQuests, id];
+    setCompletedQuests(newCompleted);
+  }, [completedQuests, setCompletedQuests]);
+
+  // Longest-prerequisite-chain depth for every task, independent of trader -
+  // used to sort/indent the list view so it still reads as a "flow" top to bottom.
+  const taskDepths = useMemo(() => {
+    const depths = new Map();
+    if (!globalData?.tasks) return depths;
+    const taskMap = new Map(globalData.tasks.map(t => [t.id, t]));
+    const compute = (id, visiting) => {
+      if (depths.has(id)) return depths.get(id);
+      if (visiting.has(id)) return 0; // defensive: shouldn't happen, avoids infinite recursion on bad data
+      const task = taskMap.get(id);
+      if (!task || !task.taskRequirements || task.taskRequirements.length === 0) {
+        depths.set(id, 0);
+        return 0;
+      }
+      visiting.add(id);
+      const d = 1 + Math.max(...task.taskRequirements.map(r => compute(r.task.id, visiting)));
+      visiting.delete(id);
+      depths.set(id, d);
+      return d;
+    };
+    globalData.tasks.forEach(t => compute(t.id, new Set()));
+    return depths;
+  }, [globalData]);
+
+  const listItems = useMemo(() => {
+    if (!globalData?.tasks) return [];
+    const taskMap = new Map(globalData.tasks.map(t => [t.id, t]));
+    let tasks = globalData.tasks.filter(t => t.trader.name === selectedTrader);
+    if (filter.trim()) {
+      const f = filter.trim().toLowerCase();
+      tasks = tasks.filter(t => t.name.toLowerCase().includes(f));
+    }
+    if (hideCompleted) {
+      tasks = tasks.filter(t => !completedQuests.includes(t.id));
+    }
+    return tasks
+      .map(task => ({
+        task,
+        depth: taskDepths.get(task.id) || 0,
+        prereqNames: (task.taskRequirements || [])
+          .map(r => taskMap.get(r.task.id)?.name)
+          .filter(Boolean),
+      }))
+      .sort((a, b) =>
+        a.depth - b.depth ||
+        (a.task.minPlayerLevel || 0) - (b.task.minPlayerLevel || 0) ||
+        a.task.name.localeCompare(b.task.name)
+      );
+  }, [globalData, selectedTrader, filter, hideCompleted, completedQuests, taskDepths]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -213,16 +270,8 @@ export default function QuestsTab({ globalData, completedQuests, setCompletedQue
         alert(`This is a ${node.data.trader} quest. Switch to their tab to manage it.`);
         return;
     }
-
-    const isDone = completedQuests.includes(node.id);
-    let newCompleted;
-    if (isDone) {
-        newCompleted = completedQuests.filter(id => id !== node.id);
-    } else {
-        newCompleted = [...completedQuests, node.id];
-    }
-    setCompletedQuests(newCompleted);
-  }, [completedQuests, setCompletedQuests]);
+    toggleQuest(node.id);
+  }, [toggleQuest]);
 
   return (
     <div className="tab-content" style={{height: '80vh'}}>
@@ -242,26 +291,66 @@ export default function QuestsTab({ globalData, completedQuests, setCompletedQue
         </select>
         <input placeholder="Search quests..." value={filter} onChange={e => setFilter(e.target.value)} style={{width: '100%', maxWidth: '300px', marginLeft: '10px'}} />
         <label style={{display:'flex', gap:'5px', cursor:'pointer', marginLeft: '10px'}}><input type="checkbox" checked={hideCompleted} onChange={e => setHideCompleted(e.target.checked)} /> Hide Completed</label>
-        <span style={{marginLeft: 'auto', fontSize: '0.8em', color: '#888'}}>
-            Right-click a quest to open Wiki.
-        </span>
+        {viewMode === 'graph' && (
+          <span style={{marginLeft: '10px', fontSize: '0.8em', color: '#888'}}>Right-click a quest to open Wiki.</span>
+        )}
+        <div style={{display: 'flex', gap: '4px', marginLeft: 'auto'}}>
+          <button type="button" className={`toggle-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')}>List</button>
+          <button type="button" className={`toggle-btn ${viewMode === 'graph' ? 'active' : ''}`} onClick={() => setViewMode('graph')}>Graph</button>
+        </div>
       </div>
 
-      <div style={{ width: '100%', height: '100%', border: '1px solid #333', borderRadius: '8px', background: '#1a1a1a' }}>
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onNodeClick={onNodeClick}
-          nodeTypes={nodeTypes}
-          fitView
-          minZoom={0.1}
-        >
-          <Background color="#222" gap={20} />
-          <Controls />
-        </ReactFlow>
-      </div>
+      {viewMode === 'list' ? (
+        <div className="quest-list-container">
+          {listItems.length === 0 && <div style={{padding: '40px', textAlign: 'center', color: '#666'}}>No quests match.</div>}
+          {listItems.map(({ task, depth, prereqNames }) => {
+            const isCompleted = completedQuests.includes(task.id);
+            return (
+              <div
+                key={task.id}
+                className={`quest-list-row ${isCompleted ? 'completed' : ''}`}
+                style={{ '--depth': Math.min(depth, 10) }}
+                onClick={() => toggleQuest(task.id)}
+              >
+                <span className="quest-list-check">{isCompleted ? '✓' : '○'}</span>
+                <span className="quest-list-name">{task.name}</span>
+                {task.kappaRequired && <span className="quest-list-kappa" title="Kappa required">K</span>}
+                {task.minPlayerLevel > 1 && <span className="quest-list-level">Lvl {task.minPlayerLevel}</span>}
+                {task.wikiLink && (
+                  <a
+                    href={task.wikiLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="quest-list-wiki"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Wiki
+                  </a>
+                )}
+                {prereqNames.length > 0 && (
+                  <span className="quest-list-req">requires: {prereqNames.join(', ')}</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div style={{ width: '100%', height: '100%', border: '1px solid #333', borderRadius: '8px', background: '#1a1a1a' }}>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onNodeClick={onNodeClick}
+            nodeTypes={nodeTypes}
+            fitView
+            minZoom={0.1}
+          >
+            <Background color="#222" gap={20} />
+            <Controls />
+          </ReactFlow>
+        </div>
+      )}
     </div>
   );
 }

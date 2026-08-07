@@ -11,7 +11,6 @@ import TrackerTab from './components/TrackerTab';
 import HideoutTab from './components/HideoutTab';
 import QuestsTab from './components/QuestsTab';
 import SquadTab from './components/SquadTab';
-import KeyringTab from './components/KeyringTab';
 import MapsTab from './components/MapsTab';
 import './App.css';
 
@@ -20,7 +19,7 @@ function App() {
   const [user, setUser] = useState(null);
   
   // NEW: State to track the selected game mode (defaults to regular)
-  const [gameMode, setGameMode] = useState('regular');
+  const [gameMode, setGameMode] = useState('pvp-season');
 
   // UPDATED: Pass the gameMode to your data fetching hook
   const { data: globalData, loading, status, retry } = useGlobalData(gameMode);
@@ -38,7 +37,6 @@ function App() {
   const [itemProgress, setItemProgress] = useFirebaseSync(user, 'tarkov_progress_v2', {});
   const [hideoutLevels, setHideoutLevels] = useFirebaseSync(user, 'tarkov_hideout_levels', {});
   const [completedQuests, setCompletedQuests] = useFirebaseSync(user, 'tarkov_completed_quests', []);
-  const [ownedKeys, setOwnedKeys] = useFirebaseSync(user, 'tarkov_owned_keys', {});
   const [faction, setFaction] = useFirebaseSync(user, 'tarkov_faction', null);
 
   const { squadCode, joinSquad, squadMembers, squadData } = useSquadData(user);
@@ -75,7 +73,7 @@ function App() {
   return (
     <div className="app-container">
       <header>
-        <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
+        <div style={{display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap'}}>
             <img src="/image.ico" alt="Logo" style={{width: '40px', height: '40px'}} />
             <h1 className="app-title">Tarkov Tracker</h1>
             
@@ -125,7 +123,6 @@ function App() {
           <button className={activeTab === 'hideout' ? 'active' : ''} onClick={() => setActiveTab('hideout')}>Hideout</button>
           <button className={activeTab === 'quests' ? 'active' : ''} onClick={() => setActiveTab('quests')}>Quests</button>
           <button className={activeTab === 'maps' ? 'active' : ''} onClick={() => { setActiveTab('maps'); setMapsTabVisited(true); }}>Maps</button>
-          <button className={activeTab === 'keys' ? 'active' : ''} onClick={() => setActiveTab('keys')}>Keyring</button>
           <button className={activeTab === 'squad' ? 'active' : ''} onClick={() => setActiveTab('squad')}>
              {getSquadLabel()}
           </button>
@@ -142,7 +139,6 @@ function App() {
             completedQuests={completedQuests}
             squadMembers={squadMembers}
             squadData={squadData}
-            ownedKeys={ownedKeys}
           />
         )}
         {activeTab === 'tracker' && (
@@ -170,13 +166,6 @@ function App() {
             mapsData={mapsData}
             loading={mapsLoading}
             status={mapsStatus}
-           />
-        )}
-        {activeTab === 'keys' && (
-          <KeyringTab 
-            globalData={globalData} 
-            ownedKeys={ownedKeys} setOwnedKeys={setOwnedKeys} 
-            squadMembers={squadMembers} squadData={squadData}
            />
         )}
         {activeTab === 'squad' && (

@@ -55,7 +55,6 @@ export function useGlobalData(gameMode = 'regular') {
                 const hideoutList = Object.values(hideoutData);
 
                 const itemMap = {};
-                const keysList = [];
 
                 itemsList.forEach(i => {
                     // The API no longer returns a resolved sellFor array - build it from the
@@ -73,19 +72,7 @@ export function useGlobalData(gameMode = 'regular') {
                     });
 
                     itemMap[i.id] = { ...i, sellFor, questDetails: [], hideoutDetails: [] };
-
-                    const nameLower = i.name.toLowerCase();
-                    const looksLikeKey = (i.types?.includes('keys') || i.types?.includes('key') || nameLower.includes('key'));
-                    const isWeaponPart = i.types?.includes('modification') || i.types?.includes('preset');
-                    const isFalsePositive = nameLower.includes('keymod') || nameLower.includes('keyslot') || nameLower.includes('keymount');
-                    const isTrash = i.types?.includes('barter') && !nameLower.includes('key');
-
-                    if (looksLikeKey && !isWeaponPart && !isFalsePositive && !isTrash) {
-                        keysList.push(itemMap[i.id]);
-                    }
                 });
-
-                keysList.sort((a, b) => a.name.localeCompare(b.name));
 
                 // Link Quests (with Duplicate Fix)
                 tasksList.forEach(task => {
@@ -142,8 +129,7 @@ export function useGlobalData(gameMode = 'regular') {
                     items: Object.values(itemMap),
                     itemMap: itemMap,
                     tasks: tasksList,
-                    hideoutStations: hideoutList,
-                    keys: keysList
+                    hideoutStations: hideoutList
                 };
 
                 try {

@@ -84,16 +84,6 @@ export function useSquadData(user) {
                 }));
             }
         }));
-        
-        // 4. NEW: Keys
-        unsubscribes.push(onSnapshot(userRef('tarkov_owned_keys'), (snap) => {
-            if (snap.exists()) {
-                setSquadData(prev => ({
-                    ...prev,
-                    [member.uid]: { ...prev[member.uid], keys: snap.data().val || {} }
-                }));
-            }
-        }));
     });
 
     return () => unsubscribes.forEach(u => u());

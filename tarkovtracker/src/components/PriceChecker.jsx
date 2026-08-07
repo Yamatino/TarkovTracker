@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 
 const SQUAD_ALERT_STYLE = { marginTop: '10px', padding: '10px', backgroundColor: 'rgba(33, 150, 243, 0.15)', border: '1px solid #2196f3', borderRadius: '4px', color: '#90caf9', fontSize: '0.9em' };
-const OWNED_STYLE = { marginTop: '5px', padding: '8px', backgroundColor: 'rgba(76, 175, 80, 0.15)', border: '1px solid #4caf50', borderRadius: '4px', color: '#a5d6a7', fontSize: '0.9em' };
 const FIR_STYLE = { color: '#ffd700', fontWeight: 'bold', marginLeft: '5px' };
 
-export default function PriceChecker({ globalData, itemProgress, hideoutLevels, completedQuests, squadMembers, squadData, ownedKeys }) {
+export default function PriceChecker({ globalData, itemProgress, hideoutLevels, completedQuests, squadMembers, squadData }) {
   const [term, setTerm] = useState("");
   const [results, setResults] = useState([]);
 
@@ -24,8 +23,8 @@ export default function PriceChecker({ globalData, itemProgress, hideoutLevels, 
 
   return (
     <div className="tab-content">
-      <form onSubmit={handleSearch} className="search-box" style={{display: 'flex', gap: '10px'}}>
-        <input value={term} onChange={e => setTerm(e.target.value)} placeholder="Search item..." style={{flex: 1}} />
+      <form onSubmit={handleSearch} className="search-box" style={{display: 'flex', gap: '10px', flexWrap: 'wrap'}}>
+        <input value={term} onChange={e => setTerm(e.target.value)} placeholder="Search item..." style={{flex: 1, minWidth: '150px'}} />
         <button type="submit">Search</button>
       </form>
 
@@ -81,8 +80,6 @@ export default function PriceChecker({ globalData, itemProgress, hideoutLevels, 
                 });
             }
 
-            const isKey = item.types?.includes('key') || item.name.toLowerCase().includes('key');
-
             // WIKI HANDLER
             const openWiki = (e) => {
                 e.preventDefault();
@@ -91,7 +88,7 @@ export default function PriceChecker({ globalData, itemProgress, hideoutLevels, 
 
             return (
               <div key={idx} className="result-card">
-                <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
+                <div style={{display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap'}}>
                     {item.iconLink && (
                         <img 
                             src={item.iconLink} 
@@ -106,13 +103,6 @@ export default function PriceChecker({ globalData, itemProgress, hideoutLevels, 
                         <div style={{color:'#666', fontSize:'0.8em'}}>{item.shortName}</div>
                     </div>
                 </div>
-
-                {isKey && (
-                    <div style={{marginTop: '10px', marginBottom: '10px'}}>
-                        {ownedKeys[item.id] ? <div style={OWNED_STYLE}><b>✓ You own this key.</b></div> : <div style={{...OWNED_STYLE, borderColor: '#555', color: '#888', backgroundColor: 'transparent'}}>You do NOT own this key.</div>}
-                        {squadMembers.length > 0 && <div style={{marginTop: '5px', fontSize: '0.9em', color: '#ccc'}}>Squad Owners: {squadMembers.map(m => squadData[m.uid]?.keys?.[item.id] ? <span key={m.uid} style={{marginLeft:'8px', background:'#1b5e20', padding:'2px 6px', borderRadius:'4px'}}>{m.name}</span> : null)}</div>}
-                    </div>
-                )}
 
                 {totalNeeded > 0 ? (
                     <div className={isComplete ? "status-complete" : "needed-alert"}>
