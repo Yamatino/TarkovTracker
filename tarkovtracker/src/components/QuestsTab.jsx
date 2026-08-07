@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import ReactFlow, { 
   useNodesState, 
   useEdgesState, 
@@ -103,20 +103,49 @@ const getLayoutedElements = (nodes, edges) => {
   return { nodes: layoutedNodes, edges };
 };
 
-export default function QuestsTab({ globalData, completedQuests, setCompletedQuests }) {
+export default function QuestsTab({ globalData, completedQuests, setCompletedQuests, faction }) {
   const [selectedTrader, setSelectedTrader] = useState("Prapor");
-  
+  const [filter, setFilter] = useState("");
+  const [hideCompleted, setHideCompleted] = useState(false);
+
+  // Questline milestones: Tarkov has no branching "story ending" the API models,
+  // but kappaRequired/lightkeeperRequired/factionName are real, trackable chains.
+  const milestoneStats = useMemo(() => {
+    if (!globalData?.tasks) return null;
+    const completedSet = new Set(completedQuests);
+    const countGroup = (predicate) => {
+      const matching = globalData.tasks.filter(predicate);
+      return { done: matching.filter(t => completedSet.has(t.id)).length, total: matching.length };
+    };
+    return {
+      kappa: countGroup(t => t.kappaRequired),
+      lightkeeper: countGroup(t => t.lightkeeperRequired),
+      // Strictly faction-exclusive quests only (not + "Any"), otherwise this stat
+      // would track ~the same number as total quest count and add no signal.
+      faction: faction ? countGroup(t => t.factionName === faction) : null,
+    };
+  }, [globalData, completedQuests, faction]);
+
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
   // Build Graph from Global Data
   useEffect(() => {
     if (!globalData || !globalData.tasks) return;
-    
+
     const rawTasks = globalData.tasks;
     const taskMap = new Map(rawTasks.map(t => [t.id, t]));
-    const primaryTasks = rawTasks.filter(t => t.trader.name === selectedTrader);
-    
+    // globalData.tasks[].map is a map ID (see globalData.maps once the Maps tab
+    // provides id->name resolution) - a future map-based filter could reuse it here.
+    let primaryTasks = rawTasks.filter(t => t.trader.name === selectedTrader);
+    if (filter.trim()) {
+      const f = filter.trim().toLowerCase();
+      primaryTasks = primaryTasks.filter(t => t.name.toLowerCase().includes(f));
+    }
+    if (hideCompleted) {
+      primaryTasks = primaryTasks.filter(t => !completedQuests.includes(t.id));
+    }
+
     const nodesToRender = new Map();
     primaryTasks.forEach(t => nodesToRender.set(t.id, { task: t, isPrimary: true }));
 
@@ -177,7 +206,7 @@ export default function QuestsTab({ globalData, completedQuests, setCompletedQue
     setNodes(layoutedNodes);
     setEdges(layoutedEdges);
 
-  }, [globalData, selectedTrader, completedQuests, setNodes, setEdges]);
+  }, [globalData, selectedTrader, completedQuests, filter, hideCompleted, setNodes, setEdges]);
 
   const onNodeClick = useCallback((event, node) => {
     if (node.data.isExternal) {
@@ -197,11 +226,22 @@ export default function QuestsTab({ globalData, completedQuests, setCompletedQue
 
   return (
     <div className="tab-content" style={{height: '80vh'}}>
+      {milestoneStats && (
+        <div className="filters" style={{marginBottom: '10px', fontSize: '0.9em'}}>
+          <span>Kappa: {milestoneStats.kappa.done}/{milestoneStats.kappa.total}</span>
+          <span>Lightkeeper: {milestoneStats.lightkeeper.done}/{milestoneStats.lightkeeper.total}</span>
+          {milestoneStats.faction && (
+            <span>Faction ({faction}): {milestoneStats.faction.done}/{milestoneStats.faction.total}</span>
+          )}
+        </div>
+      )}
       <div className="filters">
         <span style={{marginRight: '10px'}}>Select Trader:</span>
         <select value={selectedTrader} onChange={e => setSelectedTrader(e.target.value)}>
             {TRADERS.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
+        <input placeholder="Search quests..." value={filter} onChange={e => setFilter(e.target.value)} style={{width: '100%', maxWidth: '300px', marginLeft: '10px'}} />
+        <label style={{display:'flex', gap:'5px', cursor:'pointer', marginLeft: '10px'}}><input type="checkbox" checked={hideCompleted} onChange={e => setHideCompleted(e.target.checked)} /> Hide Completed</label>
         <span style={{marginLeft: 'auto', fontSize: '0.8em', color: '#888'}}>
             Right-click a quest to open Wiki.
         </span>

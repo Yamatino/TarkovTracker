@@ -4,6 +4,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { useFirebaseSync } from './hooks/useFirebaseSync';
 import { useSquadData } from './hooks/useSquadData';
 import { useGlobalData } from './hooks/useGlobalData';
+import { useMapsData } from './hooks/useMapsData';
 
 import PriceChecker from './components/PriceChecker';
 import TrackerTab from './components/TrackerTab';
@@ -11,6 +12,7 @@ import HideoutTab from './components/HideoutTab';
 import QuestsTab from './components/QuestsTab';
 import SquadTab from './components/SquadTab';
 import KeyringTab from './components/KeyringTab';
+import MapsTab from './components/MapsTab';
 import './App.css';
 
 function App() {
@@ -23,6 +25,10 @@ function App() {
   // UPDATED: Pass the gameMode to your data fetching hook
   const { data: globalData, loading, status, retry } = useGlobalData(gameMode);
 
+  // Maps tab data is fetched lazily - only once the user actually opens the tab.
+  const [mapsTabVisited, setMapsTabVisited] = useState(false);
+  const { data: mapsData, loading: mapsLoading, status: mapsStatus } = useMapsData(gameMode, mapsTabVisited);
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, setUser);
     return () => unsub();
@@ -32,7 +38,8 @@ function App() {
   const [itemProgress, setItemProgress] = useFirebaseSync(user, 'tarkov_progress_v2', {});
   const [hideoutLevels, setHideoutLevels] = useFirebaseSync(user, 'tarkov_hideout_levels', {});
   const [completedQuests, setCompletedQuests] = useFirebaseSync(user, 'tarkov_completed_quests', []);
-  const [ownedKeys, setOwnedKeys] = useFirebaseSync(user, 'tarkov_owned_keys', {}); 
+  const [ownedKeys, setOwnedKeys] = useFirebaseSync(user, 'tarkov_owned_keys', {});
+  const [faction, setFaction] = useFirebaseSync(user, 'tarkov_faction', null);
 
   const { squadCode, joinSquad, squadMembers, squadData } = useSquadData(user);
 
@@ -91,6 +98,25 @@ function App() {
               <option value="pve">PvE</option>
               <option value="pvp-season">PvP Season</option>
             </select>
+
+            {/* Faction selector - drives the faction milestone stat in the Quests tab */}
+            <select
+              value={faction || ''}
+              onChange={(e) => setFaction(e.target.value || null)}
+              className="game-mode-selector"
+              style={{
+                padding: '8px',
+                borderRadius: '6px',
+                background: '#2c2c2c',
+                color: '#fff',
+                border: '1px solid #555',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="">Faction: Unset</option>
+              <option value="BEAR">BEAR</option>
+              <option value="USEC">USEC</option>
+            </select>
         </div>
 
         <nav>
@@ -98,6 +124,7 @@ function App() {
           <button className={activeTab === 'tracker' ? 'active' : ''} onClick={() => setActiveTab('tracker')}>Tracker</button>
           <button className={activeTab === 'hideout' ? 'active' : ''} onClick={() => setActiveTab('hideout')}>Hideout</button>
           <button className={activeTab === 'quests' ? 'active' : ''} onClick={() => setActiveTab('quests')}>Quests</button>
+          <button className={activeTab === 'maps' ? 'active' : ''} onClick={() => { setActiveTab('maps'); setMapsTabVisited(true); }}>Maps</button>
           <button className={activeTab === 'keys' ? 'active' : ''} onClick={() => setActiveTab('keys')}>Keyring</button>
           <button className={activeTab === 'squad' ? 'active' : ''} onClick={() => setActiveTab('squad')}>
              {getSquadLabel()}
@@ -132,9 +159,17 @@ function App() {
            />
         )}
         {activeTab === 'quests' && (
-          <QuestsTab 
-            globalData={globalData} 
-            completedQuests={completedQuests} setCompletedQuests={setCompletedQuests} 
+          <QuestsTab
+            globalData={globalData}
+            completedQuests={completedQuests} setCompletedQuests={setCompletedQuests}
+            faction={faction}
+           />
+        )}
+        {activeTab === 'maps' && (
+          <MapsTab
+            mapsData={mapsData}
+            loading={mapsLoading}
+            status={mapsStatus}
            />
         )}
         {activeTab === 'keys' && (
