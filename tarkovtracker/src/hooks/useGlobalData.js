@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { fetchTarkovData } from '../api'; // Use the new function we created
 
-// Bump cache to v18 (new API shape) and use dynamic keys based on game mode
-const CACHE_VERSION = 'v18';
+// Bump cache to v19 (added globalData.traders for trader images) and use dynamic keys based on game mode
+const CACHE_VERSION = 'v19';
 const CACHE_DURATION = 24 * 60 * 60 * 1000;
 
 export function useGlobalData(gameMode = 'regular') {
@@ -129,7 +129,8 @@ export function useGlobalData(gameMode = 'regular') {
                     items: Object.values(itemMap),
                     itemMap: itemMap,
                     tasks: tasksList,
-                    hideoutStations: hideoutList
+                    hideoutStations: hideoutList,
+                    traders: Object.values(traderMap)
                 };
 
                 try {

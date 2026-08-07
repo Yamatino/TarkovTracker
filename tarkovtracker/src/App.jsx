@@ -4,14 +4,12 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { useFirebaseSync } from './hooks/useFirebaseSync';
 import { useSquadData } from './hooks/useSquadData';
 import { useGlobalData } from './hooks/useGlobalData';
-import { useMapsData } from './hooks/useMapsData';
 
 import PriceChecker from './components/PriceChecker';
 import TrackerTab from './components/TrackerTab';
 import HideoutTab from './components/HideoutTab';
 import QuestsTab from './components/QuestsTab';
 import SquadTab from './components/SquadTab';
-import MapsTab from './components/MapsTab';
 import './App.css';
 
 function App() {
@@ -23,10 +21,6 @@ function App() {
 
   // UPDATED: Pass the gameMode to your data fetching hook
   const { data: globalData, loading, status, retry } = useGlobalData(gameMode);
-
-  // Maps tab data is fetched lazily - only once the user actually opens the tab.
-  const [mapsTabVisited, setMapsTabVisited] = useState(false);
-  const { data: mapsData, loading: mapsLoading, status: mapsStatus } = useMapsData(gameMode, mapsTabVisited);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, setUser);
@@ -122,7 +116,6 @@ function App() {
           <button className={activeTab === 'tracker' ? 'active' : ''} onClick={() => setActiveTab('tracker')}>Tracker</button>
           <button className={activeTab === 'hideout' ? 'active' : ''} onClick={() => setActiveTab('hideout')}>Hideout</button>
           <button className={activeTab === 'quests' ? 'active' : ''} onClick={() => setActiveTab('quests')}>Quests</button>
-          <button className={activeTab === 'maps' ? 'active' : ''} onClick={() => { setActiveTab('maps'); setMapsTabVisited(true); }}>Maps</button>
           <button className={activeTab === 'squad' ? 'active' : ''} onClick={() => setActiveTab('squad')}>
              {getSquadLabel()}
           </button>
@@ -159,13 +152,6 @@ function App() {
             globalData={globalData}
             completedQuests={completedQuests} setCompletedQuests={setCompletedQuests}
             faction={faction}
-           />
-        )}
-        {activeTab === 'maps' && (
-          <MapsTab
-            mapsData={mapsData}
-            loading={mapsLoading}
-            status={mapsStatus}
            />
         )}
         {activeTab === 'squad' && (

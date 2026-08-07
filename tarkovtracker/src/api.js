@@ -4,7 +4,7 @@ const BASE_URL = 'https://json.tarkov.dev';
 
 // Endpoints whose raw response contains translation-key placeholders (see `translations`
 // in the response envelope) instead of real text, resolved via a second `<path>_<lang>` request.
-const LOCALIZED_ENDPOINTS = new Set(['items', 'tasks', 'hideout', 'traders', 'maps']);
+const LOCALIZED_ENDPOINTS = new Set(['items', 'tasks', 'hideout', 'traders']);
 
 async function fetchJson(path) {
   const response = await fetch(`${BASE_URL}${path}`, {

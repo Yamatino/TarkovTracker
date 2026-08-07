@@ -336,6 +336,48 @@ input[type="text"], input[type="number"], select {
   border-top-color: rgba(255,255,255,0.2);
 }
 
+/* --- Trader picker --- */
+.trader-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow-x: auto;
+}
+
+.trader-avatar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.trader-avatar img {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: #111;
+}
+.trader-avatar .trader-name {
+  font-size: 0.7em;
+  font-weight: bold;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.trader-avatar:hover { border-color: var(--text-secondary); }
+.trader-avatar.active { border-color: var(--accent-color); }
+.trader-avatar.active .trader-name { color: var(--accent-color); }
+
 /* --- Quest list view --- */
 .toggle-btn {
   background: transparent;

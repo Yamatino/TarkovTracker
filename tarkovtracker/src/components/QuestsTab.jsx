@@ -127,6 +127,12 @@ export default function QuestsTab({ globalData, completedQuests, setCompletedQue
     };
   }, [globalData, completedQuests, faction]);
 
+  // TRADERS order drives the picker row; imageLink is resolved from globalData.traders by name.
+  const traderList = useMemo(() => {
+    const byName = new Map((globalData?.traders || []).map(t => [t.name, t]));
+    return TRADERS.map(name => ({ name, imageLink: byName.get(name)?.imageLink }));
+  }, [globalData]);
+
   const toggleQuest = useCallback((id) => {
     const isDone = completedQuests.includes(id);
     const newCompleted = isDone ? completedQuests.filter(x => x !== id) : [...completedQuests, id];
@@ -192,8 +198,6 @@ export default function QuestsTab({ globalData, completedQuests, setCompletedQue
 
     const rawTasks = globalData.tasks;
     const taskMap = new Map(rawTasks.map(t => [t.id, t]));
-    // globalData.tasks[].map is a map ID (see globalData.maps once the Maps tab
-    // provides id->name resolution) - a future map-based filter could reuse it here.
     let primaryTasks = rawTasks.filter(t => t.trader.name === selectedTrader);
     if (filter.trim()) {
       const f = filter.trim().toLowerCase();
@@ -284,12 +288,22 @@ export default function QuestsTab({ globalData, completedQuests, setCompletedQue
           )}
         </div>
       )}
+      <div className="trader-row">
+        {traderList.map(({ name, imageLink }) => (
+          <button
+            key={name}
+            type="button"
+            className={`trader-avatar ${selectedTrader === name ? 'active' : ''}`}
+            onClick={() => setSelectedTrader(name)}
+            title={name}
+          >
+            {imageLink ? <img src={imageLink} alt={name} /> : <span>{name[0]}</span>}
+            <span className="trader-name">{name}</span>
+          </button>
+        ))}
+      </div>
       <div className="filters">
-        <span style={{marginRight: '10px'}}>Select Trader:</span>
-        <select value={selectedTrader} onChange={e => setSelectedTrader(e.target.value)}>
-            {TRADERS.map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
-        <input placeholder="Search quests..." value={filter} onChange={e => setFilter(e.target.value)} style={{width: '100%', maxWidth: '300px', marginLeft: '10px'}} />
+        <input placeholder="Search quests..." value={filter} onChange={e => setFilter(e.target.value)} style={{width: '100%', maxWidth: '300px'}} />
         <label style={{display:'flex', gap:'5px', cursor:'pointer', marginLeft: '10px'}}><input type="checkbox" checked={hideCompleted} onChange={e => setHideCompleted(e.target.checked)} /> Hide Completed</label>
         {viewMode === 'graph' && (
           <span style={{marginLeft: '10px', fontSize: '0.8em', color: '#888'}}>Right-click a quest to open Wiki.</span>
