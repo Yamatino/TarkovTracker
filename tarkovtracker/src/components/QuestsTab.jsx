@@ -1,14 +1,16 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import ReactFlow, { 
-  useNodesState, 
-  useEdgesState, 
-  Background, 
+import ReactFlow, {
+  useNodesState,
+  useEdgesState,
+  Background,
   Controls,
-  Handle, 
-  Position 
+  Handle,
+  Position
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import dagre from 'dagre';
+import { Search, List, GitBranch, CheckCircle2, Circle, ExternalLink, Award, Lightbulb, Shield } from 'lucide-react';
+import StatChip from './ui/StatChip';
 
 const TRADERS = ["Prapor", "Therapist", "Skier", "Peacekeeper", "Mechanic", "Ragman", "Jaeger", "Fence"];
 
@@ -31,37 +33,17 @@ const QuestNode = ({ data }) => {
         title="Right-click for Wiki"
     >
       <Handle type="target" position={Position.Top} style={{ background: '#555', visibility: 'hidden' }} />
-      
+
       {/* KAPPA BADGE */}
-      {data.kappaRequired && (
-          <div style={{
-              position: 'absolute',
-              top: '-8px',
-              right: '-8px',
-              width: '20px',
-              height: '20px',
-              background: '#9c27b0', // Purple
-              color: 'white',
-              borderRadius: '50%',
-              fontSize: '12px',
-              fontWeight: 'bold',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              border: '2px solid #121212',
-              zIndex: 10
-          }}>
-              K
-          </div>
-      )}
+      {data.kappaRequired && <div className="badge-kappa">K</div>}
 
       <div className="quest-title">{data.label}</div>
       {isExternal && <div className="quest-trader">({data.trader})</div>}
       {data.reqText && <div className="quest-req">{data.reqText}</div>}
-      
+
       {!isExternal && (
         <div className="quest-status">
-            {data.isCompleted ? "DONE" : "ACTIVE"}
+            {data.isCompleted ? <><CheckCircle2 size={11} /> DONE</> : <><Circle size={11} /> ACTIVE</>}
         </div>
       )}
       
@@ -278,13 +260,13 @@ export default function QuestsTab({ globalData, completedQuests, setCompletedQue
   }, [toggleQuest]);
 
   return (
-    <div className="tab-content" style={{height: '80vh'}}>
+    <div className="tab-content" style={{height: 'clamp(400px, 70vh, 900px)'}}>
       {milestoneStats && (
-        <div className="filters" style={{marginBottom: '10px', fontSize: '0.9em'}}>
-          <span>Kappa: {milestoneStats.kappa.done}/{milestoneStats.kappa.total}</span>
-          <span>Lightkeeper: {milestoneStats.lightkeeper.done}/{milestoneStats.lightkeeper.total}</span>
+        <div className="milestone-bar">
+          <StatChip icon={Award} label="Kappa" done={milestoneStats.kappa.done} total={milestoneStats.kappa.total} />
+          <StatChip icon={Lightbulb} label="Lightkeeper" done={milestoneStats.lightkeeper.done} total={milestoneStats.lightkeeper.total} />
           {milestoneStats.faction && (
-            <span>Faction ({faction}): {milestoneStats.faction.done}/{milestoneStats.faction.total}</span>
+            <StatChip icon={Shield} label={`Faction (${faction})`} done={milestoneStats.faction.done} total={milestoneStats.faction.total} />
           )}
         </div>
       )}
@@ -303,20 +285,23 @@ export default function QuestsTab({ globalData, completedQuests, setCompletedQue
         ))}
       </div>
       <div className="filters">
-        <input placeholder="Search quests..." value={filter} onChange={e => setFilter(e.target.value)} style={{width: '100%', maxWidth: '300px'}} />
-        <label style={{display:'flex', gap:'5px', cursor:'pointer', marginLeft: '10px'}}><input type="checkbox" checked={hideCompleted} onChange={e => setHideCompleted(e.target.checked)} /> Hide Completed</label>
+        <div className="input-with-icon">
+          <Search size={16} />
+          <input placeholder="Search quests..." value={filter} onChange={e => setFilter(e.target.value)} />
+        </div>
+        <label className="checkbox-label"><input type="checkbox" checked={hideCompleted} onChange={e => setHideCompleted(e.target.checked)} /> Hide Completed</label>
         {viewMode === 'graph' && (
-          <span style={{marginLeft: '10px', fontSize: '0.8em', color: '#888'}}>Right-click a quest to open Wiki.</span>
+          <span style={{fontSize: '0.8em', color: 'var(--text-secondary)'}}>Right-click a quest to open Wiki.</span>
         )}
-        <div style={{display: 'flex', gap: '4px', marginLeft: 'auto'}}>
-          <button type="button" className={`toggle-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')}>List</button>
-          <button type="button" className={`toggle-btn ${viewMode === 'graph' ? 'active' : ''}`} onClick={() => setViewMode('graph')}>Graph</button>
+        <div className="filters-right" style={{gap: '4px'}}>
+          <button type="button" className={`toggle-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')}><List size={14} /> List</button>
+          <button type="button" className={`toggle-btn ${viewMode === 'graph' ? 'active' : ''}`} onClick={() => setViewMode('graph')}><GitBranch size={14} /> Graph</button>
         </div>
       </div>
 
       {viewMode === 'list' ? (
         <div className="quest-list-container">
-          {listItems.length === 0 && <div style={{padding: '40px', textAlign: 'center', color: '#666'}}>No quests match.</div>}
+          {listItems.length === 0 && <div className="empty-state">No quests match.</div>}
           {listItems.map(({ task, depth, prereqNames }) => {
             const isCompleted = completedQuests.includes(task.id);
             return (
@@ -326,9 +311,9 @@ export default function QuestsTab({ globalData, completedQuests, setCompletedQue
                 style={{ '--depth': Math.min(depth, 10) }}
                 onClick={() => toggleQuest(task.id)}
               >
-                <span className="quest-list-check">{isCompleted ? '✓' : '○'}</span>
+                <span className="quest-list-check">{isCompleted ? <CheckCircle2 size={18} /> : <Circle size={18} />}</span>
                 <span className="quest-list-name">{task.name}</span>
-                {task.kappaRequired && <span className="quest-list-kappa" title="Kappa required">K</span>}
+                {task.kappaRequired && <span className="badge-kappa" title="Kappa required">K</span>}
                 {task.minPlayerLevel > 1 && <span className="quest-list-level">Lvl {task.minPlayerLevel}</span>}
                 {task.wikiLink && (
                   <a
@@ -338,7 +323,7 @@ export default function QuestsTab({ globalData, completedQuests, setCompletedQue
                     className="quest-list-wiki"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    Wiki
+                    <ExternalLink size={12} /> Wiki
                   </a>
                 )}
                 {prereqNames.length > 0 && (
@@ -349,7 +334,7 @@ export default function QuestsTab({ globalData, completedQuests, setCompletedQue
           })}
         </div>
       ) : (
-        <div style={{ width: '100%', height: '100%', border: '1px solid #333', borderRadius: '8px', background: '#1a1a1a' }}>
+        <div className="quest-graph-container">
           <ReactFlow
             nodes={nodes}
             edges={edges}

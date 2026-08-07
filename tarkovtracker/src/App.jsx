@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
+import { RotateCw } from 'lucide-react';
 import { auth } from './firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useFirebaseSync } from './hooks/useFirebaseSync';
 import { useSquadData } from './hooks/useSquadData';
 import { useGlobalData } from './hooks/useGlobalData';
 
+import Header from './components/layout/Header';
+import Sidebar from './components/layout/Sidebar';
+import BottomNav from './components/layout/BottomNav';
 import PriceChecker from './components/PriceChecker';
 import TrackerTab from './components/TrackerTab';
 import HideoutTab from './components/HideoutTab';
@@ -37,22 +41,23 @@ function App() {
 
   if (loading) {
       return (
-          <div className="app-container" style={{display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', flexDirection:'column'}}>
-              <img src="/image.ico" alt="Loading" style={{width:'80px', marginBottom:'20px', animation:'spin 2s linear infinite'}} />
+          <div className="loading-screen">
+              <img src="/image.ico" alt="Loading" />
               <h2>Tarkov Tracker by Yama</h2>
-              <p style={{color:'#888'}}>{status}</p>
-              <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+              <p>{status}</p>
           </div>
       );
   }
 
   if (!globalData) {
       return (
-          <div className="app-container" style={{display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', flexDirection:'column'}}>
-              <img src="/image.ico" alt="Error" style={{width:'80px', marginBottom:'20px'}} />
+          <div className="error-screen">
+              <img src="/image.ico" alt="Error" />
               <h2>Tarkov Tracker by Yama</h2>
-              <p style={{color:'#e57373'}}>{status}</p>
-              <button onClick={retry} style={{marginTop:'15px', padding:'8px 20px', borderRadius:'6px', background:'#2c2c2c', color:'#fff', border:'1px solid #555', cursor:'pointer'}}>Retry</button>
+              <p>{status}</p>
+              <button onClick={retry} className="btn btn-primary" style={{marginTop: '15px'}}>
+                  <RotateCw size={16} /> Retry
+              </button>
           </div>
       );
   }
@@ -65,105 +70,59 @@ function App() {
   };
 
   return (
-    <div className="app-container">
-      <header>
-        <div style={{display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap'}}>
-            <img src="/image.ico" alt="Logo" style={{width: '40px', height: '40px'}} />
-            <h1 className="app-title">Tarkov Tracker</h1>
-            
-            {/* NEW: Game Mode Dropdown Selector */}
-            <select 
-              value={gameMode} 
-              onChange={(e) => setGameMode(e.target.value)}
-              className="game-mode-selector"
-              style={{
-                marginLeft: 'auto', 
-                padding: '8px', 
-                borderRadius: '6px', 
-                background: '#2c2c2c', 
-                color: '#fff', 
-                border: '1px solid #555',
-                cursor: 'pointer'
-              }}
-            >
-              <option value="regular">Regular (PvP)</option>
-              <option value="pve">PvE</option>
-              <option value="pvp-season">PvP Season</option>
-            </select>
+    <div className="app-shell">
+      <Header gameMode={gameMode} setGameMode={setGameMode} faction={faction} setFaction={setFaction} />
 
-            {/* Faction selector - drives the faction milestone stat in the Quests tab */}
-            <select
-              value={faction || ''}
-              onChange={(e) => setFaction(e.target.value || null)}
-              className="game-mode-selector"
-              style={{
-                padding: '8px',
-                borderRadius: '6px',
-                background: '#2c2c2c',
-                color: '#fff',
-                border: '1px solid #555',
-                cursor: 'pointer'
-              }}
-            >
-              <option value="">Faction: Unset</option>
-              <option value="BEAR">BEAR</option>
-              <option value="USEC">USEC</option>
-            </select>
-        </div>
+      <div className="app-body">
+        <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} squadLabel={getSquadLabel()} />
 
-        <nav>
-          <button className={activeTab === 'search' ? 'active' : ''} onClick={() => setActiveTab('search')}>Price Check</button>
-          <button className={activeTab === 'tracker' ? 'active' : ''} onClick={() => setActiveTab('tracker')}>Tracker</button>
-          <button className={activeTab === 'hideout' ? 'active' : ''} onClick={() => setActiveTab('hideout')}>Hideout</button>
-          <button className={activeTab === 'quests' ? 'active' : ''} onClick={() => setActiveTab('quests')}>Quests</button>
-          <button className={activeTab === 'squad' ? 'active' : ''} onClick={() => setActiveTab('squad')}>
-             {getSquadLabel()}
-          </button>
-        </nav>
-      </header>
-      
-      <main>
-        {activeTab === 'search' && (
-          <PriceChecker 
-            globalData={globalData} 
-            gameMode={gameMode} // NEW: Passed down so PriceChecker can fetch price history
-            itemProgress={itemProgress} 
-            hideoutLevels={hideoutLevels} 
-            completedQuests={completedQuests}
-            squadMembers={squadMembers}
-            squadData={squadData}
-          />
-        )}
-        {activeTab === 'tracker' && (
-          <TrackerTab 
-            globalData={globalData} 
-            itemProgress={itemProgress} setItemProgress={setItemProgress}
-            hideoutLevels={hideoutLevels} completedQuests={completedQuests}
-          />
-        )}
-        {activeTab === 'hideout' && (
-          <HideoutTab 
-            globalData={globalData} 
-            levels={hideoutLevels} setLevels={setHideoutLevels} 
-           />
-        )}
-        {activeTab === 'quests' && (
-          <QuestsTab
-            globalData={globalData}
-            completedQuests={completedQuests} setCompletedQuests={setCompletedQuests}
-            faction={faction}
-           />
-        )}
-        {activeTab === 'squad' && (
-          <SquadTab 
-            user={user} 
-            squadCode={squadCode}
-            joinSquad={joinSquad}
-            squadMembers={squadMembers}
-            squadData={squadData}
-          />
-        )}
-      </main>
+        <main className="app-main">
+          <div className="app-main-inner">
+            {activeTab === 'search' && (
+              <PriceChecker
+                globalData={globalData}
+                gameMode={gameMode} // NEW: Passed down so PriceChecker can fetch price history
+                itemProgress={itemProgress}
+                hideoutLevels={hideoutLevels}
+                completedQuests={completedQuests}
+                squadMembers={squadMembers}
+                squadData={squadData}
+              />
+            )}
+            {activeTab === 'tracker' && (
+              <TrackerTab
+                globalData={globalData}
+                itemProgress={itemProgress} setItemProgress={setItemProgress}
+                hideoutLevels={hideoutLevels} completedQuests={completedQuests}
+              />
+            )}
+            {activeTab === 'hideout' && (
+              <HideoutTab
+                globalData={globalData}
+                levels={hideoutLevels} setLevels={setHideoutLevels}
+               />
+            )}
+            {activeTab === 'quests' && (
+              <QuestsTab
+                globalData={globalData}
+                completedQuests={completedQuests} setCompletedQuests={setCompletedQuests}
+                faction={faction}
+               />
+            )}
+            {activeTab === 'squad' && (
+              <SquadTab
+                user={user}
+                squadCode={squadCode}
+                joinSquad={joinSquad}
+                squadMembers={squadMembers}
+                squadData={squadData}
+              />
+            )}
+          </div>
+        </main>
+      </div>
+
+      <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} squadLabel={getSquadLabel()} />
     </div>
   );
 }

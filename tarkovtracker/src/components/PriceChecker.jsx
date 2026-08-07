@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-
-const SQUAD_ALERT_STYLE = { marginTop: '10px', padding: '10px', backgroundColor: 'rgba(33, 150, 243, 0.15)', border: '1px solid #2196f3', borderRadius: '4px', color: '#90caf9', fontSize: '0.9em' };
-const FIR_STYLE = { color: '#ffd700', fontWeight: 'bold', marginLeft: '5px' };
+import { Search, CheckCircle2, AlertTriangle, Package, Users, TrendingUp, TrendingDown, ExternalLink } from 'lucide-react';
+import Avatar from './ui/Avatar';
 
 export default function PriceChecker({ globalData, itemProgress, hideoutLevels, completedQuests, squadMembers, squadData }) {
   const [term, setTerm] = useState("");
@@ -12,11 +11,11 @@ export default function PriceChecker({ globalData, itemProgress, hideoutLevels, 
     if (!term.trim()) return;
     const q = term.toLowerCase().trim();
 
-    let matches = globalData.items.filter(i => 
-        (i.name && i.name.toLowerCase().includes(q)) || 
+    let matches = globalData.items.filter(i =>
+        (i.name && i.name.toLowerCase().includes(q)) ||
         (i.shortName && i.shortName.toLowerCase().includes(q))
     );
-    
+
     matches.sort((a, b) => a.name.length - b.name.length);
     setResults(matches.slice(0, 10));
   };
@@ -24,14 +23,17 @@ export default function PriceChecker({ globalData, itemProgress, hideoutLevels, 
   return (
     <div className="tab-content">
       <form onSubmit={handleSearch} className="search-box" style={{display: 'flex', gap: '10px', flexWrap: 'wrap'}}>
-        <input value={term} onChange={e => setTerm(e.target.value)} placeholder="Search item..." style={{flex: 1, minWidth: '150px'}} />
-        <button type="submit">Search</button>
+        <div className="input-with-icon">
+          <Search size={16} />
+          <input value={term} onChange={e => setTerm(e.target.value)} placeholder="Search item..." />
+        </div>
+        <button type="submit"><Search size={16} /> Search</button>
       </form>
 
       <div className="results-grid">
         {results.map((item, idx) => {
             const userHas = itemProgress[item.id] || 0;
-            
+
             // Quest Status Logic
             const activeQuests = [];
             const completedQuestList = [];
@@ -87,36 +89,33 @@ export default function PriceChecker({ globalData, itemProgress, hideoutLevels, 
             };
 
             return (
-              <div key={idx} className="result-card">
-                <div style={{display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap'}}>
-                    {item.iconLink && (
-                        <img 
-                            src={item.iconLink} 
-                            alt="" 
-                            style={{width: 64, height: 64, cursor: 'context-menu'}}
-                            onContextMenu={openWiki}
-                            title="Right-click for Wiki"
-                        />
-                    )}
+              <div key={idx} className="card result-card">
+                <div className="result-card-header">
+                    <div className="card-media" onContextMenu={openWiki} title="Right-click for Wiki">
+                        {item.iconLink && <img src={item.iconLink} alt="" />}
+                        {item.wikiLink && <span className="wiki-hint"><ExternalLink size={10} /></span>}
+                    </div>
                     <div>
                         <h3>{item.name}</h3>
-                        <div style={{color:'#666', fontSize:'0.8em'}}>{item.shortName}</div>
+                        <div style={{color:'var(--text-secondary)', fontSize:'0.8em'}}>{item.shortName}</div>
                     </div>
                 </div>
 
                 {totalNeeded > 0 ? (
                     <div className={isComplete ? "status-complete" : "needed-alert"}>
-                        {isComplete ? <span>✅ COMPLETED ({userHas}/{totalNeeded})</span> : <span>[!] NEEDED: {totalNeeded} (Have {userHas})</span>}
-                        {!isComplete && <div style={{marginTop: 10, fontSize:'0.9em'}}>
-                             {activeQuests.length > 0 && <ul style={{margin:'5px 0 5px 20px', color:'#ddd'}}>{activeQuests.map((q,i)=><li key={i}>{q.name} ({q.trader}): <b>{q.count}</b>{q.fir && <span style={FIR_STYLE}>(FIR)</span>}</li>)}</ul>}
-                             {activeHideout.length > 0 && <ul style={{margin:'5px 0 5px 20px', color:'#ddd'}}>{activeHideout.map((h,i)=><li key={i}>{h.station} (Lvl {h.level}): <b>{h.count}</b></li>)}</ul>}
+                        {isComplete
+                          ? <span className="alert-title"><CheckCircle2 size={16} /> COMPLETED ({userHas}/{totalNeeded})</span>
+                          : <span className="alert-title"><AlertTriangle size={16} /> NEEDED: {totalNeeded} (Have {userHas})</span>}
+                        {!isComplete && <div style={{fontSize:'0.9em'}}>
+                             {activeQuests.length > 0 && <ul style={{margin:'5px 0 5px 20px', color:'var(--text-primary)'}}>{activeQuests.map((q,i)=><li key={i}>{q.name} ({q.trader}): <b>{q.count}</b>{q.fir && <span className="badge badge-fir" style={{marginLeft: 6}}><Package size={10} /> FIR</span>}</li>)}</ul>}
+                             {activeHideout.length > 0 && <ul style={{margin:'5px 0 5px 20px', color:'var(--text-primary)'}}>{activeHideout.map((h,i)=><li key={i}>{h.station} (Lvl {h.level}): <b>{h.count}</b></li>)}</ul>}
                         </div>}
                     </div>
                 ) : (
                     <div className="not-needed">
                         No active tasks.
                         {completedQuestList.length > 0 && (
-                            <div style={{marginTop: '8px', fontSize: '0.85em', color: '#666'}}>
+                            <div style={{marginTop: '8px', fontSize: '0.85em'}}>
                                 <div>Used in completed quests:</div>
                                 <ul style={{margin: '2px 0 0 20px', padding: 0}}>
                                     {completedQuestList.map((q, i) => (
@@ -130,16 +129,30 @@ export default function PriceChecker({ globalData, itemProgress, hideoutLevels, 
                     </div>
                 )}
 
-                {squadNeeds.length > 0 && <div style={SQUAD_ALERT_STYLE}><b>Needed by Squad:</b>{squadNeeds.map((s, i) => (
-                    <div key={i} style={{display:'flex', alignItems:'center', gap:'8px', marginTop:'4px'}}>
-                        {s.photo ? <img src={s.photo} style={{width:20, height:20, borderRadius:'50%'}}/> : <span style={{width:20, height:20, background:'#0d47a1', borderRadius:'50%', textAlign:'center', fontSize:'0.7em'}}>{s.name[0]}</span>}
-                        {s.name} needs <b>{s.missing}</b>{s.fir && <span style={FIR_STYLE}>(FIR)</span>}
-                    </div>
-                ))}</div>}
-                
+                {squadNeeds.length > 0 && (
+                  <div className="squad-alert">
+                    <div className="squad-alert-title"><Users size={14} /> Needed by Squad:</div>
+                    {squadNeeds.map((s, i) => (
+                        <div key={i} className="squad-need-row">
+                            <Avatar src={s.photo} name={s.name} size={20} />
+                            {s.name} needs <b>{s.missing}</b>{s.fir && <span className="badge badge-fir"><Package size={10} /> FIR</span>}
+                        </div>
+                    ))}
+                  </div>
+                )}
+
                 <div className="prices">
                     <div className="trader-price">Trader: {bestTrader.name}<br/><b>{bestTrader.price.toLocaleString()} ₽</b></div>
-                    {finalFlea > 0 ? <div className="flea-price">Flea: ~{finalFlea.toLocaleString()} ₽<div className={profit>0?"profit":"loss"}>{profit>0?`PROFIT: +${profit.toLocaleString()}`:"SELL TRADER"}</div></div> : <div>Flea: N/A</div>}
+                    {finalFlea > 0 ? (
+                      <div className="flea-price">
+                        Flea: ~{finalFlea.toLocaleString()} ₽
+                        <div className={profit>0?"profit":"loss"}>
+                          {profit>0
+                            ? <><TrendingUp size={14} /> PROFIT: +{profit.toLocaleString()}</>
+                            : <><TrendingDown size={14} /> SELL TRADER</>}
+                        </div>
+                      </div>
+                    ) : <div>Flea: N/A</div>}
                 </div>
               </div>
             );

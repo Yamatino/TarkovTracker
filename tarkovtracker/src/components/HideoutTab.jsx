@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { Minus, Plus, Home } from 'lucide-react';
 
 const PREFERRED_ORDER = ["Vents", "Security", "Lavatory", "Stash", "Generator", "Heating", "Rest Space", "Workbench", "Medstation", "Nutrition Unit", "Water Collector", "Shooting Range", "Library", "Scav Case", "Intelligence Center", "Illumination", "Booze Generator", "Bitcoin Farm", "Solar Power", "Air Filtering Unit", "Defective Wall", "Gym"];
 
@@ -22,21 +23,21 @@ export default function HideoutTab({ globalData, levels, setLevels }) {
 
   return (
     <div className="tab-content">
-      <h3 className="section-title">Hideout Management</h3>
+      <h3 className="section-title"><Home size={20} /> Hideout Management</h3>
       <div className="station-grid">
         {stations.map(s => {
             const cur = levels[s.name] || 0;
             const max = s.levels.length;
             return (
-              <div key={s.name} className="station-card">
-                <div style={{display:'flex', alignItems:'center', gap:'15px'}}>
-                    {s.imageLink && <img src={s.imageLink} style={{width:50, height:50, objectFit:'contain'}} />}
-                    <span className="station-name" style={{fontWeight:'bold'}}>{s.name}</span>
+              <div key={s.name} className="card station-card">
+                <div className="station-card-header">
+                    {s.imageLink && <img src={s.imageLink} alt="" />}
+                    <span className="station-name">{s.name}</span>
                 </div>
-                <div className="controls" style={{display:'flex', alignItems:'center'}}>
-                  <button className="btn-mini" onClick={()=>changeLevel(s.name, -1, max)} disabled={cur===0}>-</button>
-                  <span className="level-badge" style={{margin:'0 10px', minWidth:'60px', textAlign:'center'}}>Lvl {cur} <span style={{color:'#555', fontSize:'0.8em'}}>/ {max}</span></span>
-                  <button className="btn-mini" onClick={()=>changeLevel(s.name, 1, max)} disabled={cur>=max}>+</button>
+                <div className="controls">
+                  <button className="btn-mini" onClick={()=>changeLevel(s.name, -1, max)} disabled={cur===0} aria-label={`Decrease ${s.name} level`}><Minus size={14} /></button>
+                  <span className="level-badge">Lvl {cur} <span className="level-max">/ {max}</span></span>
+                  <button className="btn-mini" onClick={()=>changeLevel(s.name, 1, max)} disabled={cur>=max} aria-label={`Increase ${s.name} level`}><Plus size={14} /></button>
                 </div>
               </div>
             );

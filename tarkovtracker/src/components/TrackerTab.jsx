@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Search, Minus, Plus, CheckCircle2, CircleDot, Circle, PackageOpen } from 'lucide-react';
 
 export default function TrackerTab({ globalData, itemProgress, setItemProgress, hideoutLevels, completedQuests }) {
   const [filter, setFilter] = useState("");
@@ -49,10 +50,13 @@ export default function TrackerTab({ globalData, itemProgress, setItemProgress, 
   return (
     <div className="tab-content">
       <div className="filters">
-        <input placeholder="Search items..." value={filter} onChange={e => setFilter(e.target.value)} style={{width: '100%', maxWidth: '300px'}} />
-        <div style={{marginLeft: 'auto', display: 'flex', gap: '15px'}}>
-            <label style={{display:'flex', gap:'5px', cursor:'pointer'}}><input type="checkbox" checked={showCompleted} onChange={e => setShowCompleted(e.target.checked)} /> Show Completed</label>
-            <label style={{display:'flex', gap:'5px', cursor:'pointer'}}><input type="checkbox" checked={excludeCollector} onChange={e => setExcludeCollector(e.target.checked)} /> Hide Collector</label>
+        <div className="input-with-icon">
+          <Search size={16} />
+          <input placeholder="Search items..." value={filter} onChange={e => setFilter(e.target.value)} />
+        </div>
+        <div className="filters-right">
+            <label className="checkbox-label"><input type="checkbox" checked={showCompleted} onChange={e => setShowCompleted(e.target.checked)} /> Show Completed</label>
+            <label className="checkbox-label"><input type="checkbox" checked={excludeCollector} onChange={e => setExcludeCollector(e.target.checked)} /> Hide Collector</label>
         </div>
       </div>
 
@@ -62,21 +66,31 @@ export default function TrackerTab({ globalData, itemProgress, setItemProgress, 
             const has = itemProgress[item.id] || 0;
             let status = "needed";
             if (has >= total) status = "collected"; else if (has > 0) status = "partial";
-            
+            const StatusIcon = status === "collected" ? CheckCircle2 : status === "partial" ? CircleDot : Circle;
+
             return (
-              <div key={item.id} className={`item-row ${status}`}>
-                <div className="col-img">{item.icon && <img src={item.icon} className="item-icon" />}</div>
-                <div className="col-name">{item.name} {item.fir && <span style={{color:'#ffd700', fontWeight:'bold', fontSize:'0.8em'}}>(FIR)</span>}</div>
-                <div className="col-breakdown">Quest: {item.quest} | Hideout: {item.hideout}</div>
-                <div className="col-controls">
-                  <button className="btn-mini" onClick={() => updateCount(item.id, has-1)}>-</button>
-                  <input className="count-input" value={has} onChange={(e) => updateCount(item.id, e.target.value)} onClick={(e)=>e.target.select()} />
-                  <span className="count-total"> / {total}</span>
-                  <button className="btn-mini" onClick={() => updateCount(item.id, has+1)}>+</button>
+              <div key={item.id} className={`card tracker-card ${status}`}>
+                <div className="tracker-card-header">
+                  <div className="tracker-card-media">{item.icon && <img src={item.icon} alt="" />}</div>
+                  <div className="tracker-card-name">{item.name}</div>
+                  <StatusIcon size={18} className="tracker-card-status-icon" />
+                </div>
+                <div className="tracker-card-badges">
+                  {item.quest > 0 && <span className="badge">Quest: {item.quest}</span>}
+                  {item.hideout > 0 && <span className="badge">Hideout: {item.hideout}</span>}
+                  {item.fir && <span className="badge badge-fir">FIR</span>}
+                </div>
+                <div className="tracker-card-footer">
+                  <div className="stepper">
+                    <button className="btn-mini" onClick={() => updateCount(item.id, has-1)} aria-label={`Decrease ${item.name} count`}><Minus size={14} /></button>
+                    <input className="count-input" value={has} onChange={(e) => updateCount(item.id, e.target.value)} onClick={(e)=>e.target.select()} />
+                    <button className="btn-mini" onClick={() => updateCount(item.id, has+1)} aria-label={`Increase ${item.name} count`}><Plus size={14} /></button>
+                  </div>
+                  <span className="count-total">/ {total}</span>
                 </div>
               </div>
             );
-        }) : <div style={{textAlign:'center', padding:'40px', color:'#666'}}>No items.</div>}
+        }) : <div className="empty-state"><PackageOpen size={32} /> No items.</div>}
       </div>
     </div>
   );
